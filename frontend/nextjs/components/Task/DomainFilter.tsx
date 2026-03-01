@@ -1,5 +1,6 @@
 import React from "react";
 import { Domain } from "@/types/data";
+import { useTranslations } from "next-intl";
 
 interface DomainFilterProps {
   domains: Domain[];
@@ -16,17 +17,19 @@ export default function DomainFilter({
   onAddDomain,
   onRemoveDomain,
 }: DomainFilterProps) {
+  const t = useTranslations();
+
   return (
     <div className="mt-4 domain_filters">
       <div className="flex gap-2 mb-4">
         <label htmlFor="domain_filters" className="agent_question">
-          Filter by domain{" "}
+          {t("settings.domainFilter.label")}
         </label>
         <input
           type="text"
           value={newDomain}
           onChange={(e) => setNewDomain(e.target.value)}
-          placeholder="Filter by domain (e.g., techcrunch.com)"
+          placeholder={t("settings.domainFilter.placeholder")}
           className="input-static"
           onKeyPress={(e) => {
             if (e.key === "Enter") {
@@ -40,7 +43,7 @@ export default function DomainFilter({
           onClick={onAddDomain}
           className="button-static"
         >
-          Add Domain
+          {t("settings.domainFilter.add")}
         </button>
       </div>
 

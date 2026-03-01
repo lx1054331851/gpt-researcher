@@ -1,0 +1,235 @@
+{
+  "common": {
+    "active": "Active",
+    "cancel": "Cancel",
+    "copyToClipboard": "Copy to clipboard",
+    "copyright": "Copyright © {year} GPT Researcher",
+    "newResearch": "New Research",
+    "processing": "Processing...",
+    "researchComplete": "Research complete",
+    "researching": "Researching...",
+    "returnHome": "Return Home",
+    "saveChanges": "Save Changes",
+    "settings": "Settings",
+    "share": "Share",
+    "shareReport": "Share Report",
+    "startNewResearch": "Start New Research",
+    "startResearch": "Start research",
+    "stop": "Stop",
+    "submit": "Submit",
+    "thinking": "Thinking...",
+    "unknownTime": "Unknown time"
+  },
+  "hero": {
+    "title": "What can I help you research today?",
+    "disclaimer": "GPT Researcher can make mistakes. Verify important information.",
+    "inputPlaceholder": "Enter your research question...",
+    "suggestions": {
+      "stock": "Analyze recent stock performance and outlook for NVIDIA",
+      "adventure": "Plan a 10-day adventure trip in Patagonia",
+      "news": "Summarize this week's most important AI news"
+    }
+  },
+  "settings": {
+    "preferencesTitle": "Preferences",
+    "reportSettingsTab": "Report Settings",
+    "reportTypeLabel": "Report Type",
+    "reportType": {
+      "summary": "Summary Report",
+      "deep": "Deep Research",
+      "multiAgents": "Multi Agents",
+      "detailed": "Detailed Report"
+    },
+    "reportSourceLabel": "Report Source",
+    "reportSource": {
+      "web": "Web",
+      "local": "Local Files",
+      "hybrid": "Web + Local"
+    },
+    "reportLanguageLabel": "Report Language",
+    "reportLanguage": {
+      "english": "English",
+      "chinese": "Chinese"
+    },
+    "uiLanguageLabel": "UI Language",
+    "uiLanguage": {
+      "en": "English (en)",
+      "zh-CN": "简体中文 (zh-CN)"
+    },
+    "toneLabel": "Tone",
+    "toneOptions": {
+      "Objective": "Objective",
+      "Formal": "Formal",
+      "Analytical": "Analytical",
+      "Persuasive": "Persuasive",
+      "Informative": "Informative",
+      "Explanatory": "Explanatory",
+      "Descriptive": "Descriptive",
+      "Critical": "Critical",
+      "Comparative": "Comparative",
+      "Speculative": "Speculative",
+      "Reflective": "Reflective",
+      "Narrative": "Narrative",
+      "Humorous": "Humorous",
+      "Optimistic": "Optimistic",
+      "Pessimistic": "Pessimistic",
+      "Simple": "Simple",
+      "Casual": "Casual"
+    },
+    "layoutLabel": "Layout",
+    "layoutOptions": {
+      "research": "Research",
+      "copilot": "Copilot",
+      "copilotMobile": "Copilot",
+      "documentMobile": "Document"
+    },
+    "domainFilter": {
+      "label": "Domain Filter",
+      "placeholder": "e.g. nature.com",
+      "add": "Add"
+    },
+    "fileUpload": {
+      "dropzone": "Drop files here, or click to upload",
+      "uploadedFiles": "Uploaded Files"
+    },
+    "mcp": {
+      "enable": "Enable MCP",
+      "learnMore": "Learn more",
+      "subtitle": "Connect Model Context Protocol servers to extend tools and data access.",
+      "quickPresets": "Quick Presets",
+      "presetGithub": "GitHub",
+      "presetTavily": "Tavily",
+      "presetFilesystem": "Filesystem",
+      "presetsHelp": "Select one or more presets to auto-fill a valid MCP configuration.",
+      "configurationTitle": "MCP Configuration",
+      "configurationPlaceholder": "Paste MCP server configs as a JSON array",
+      "configurationHelp": "Each server config should include",
+      "configurationHelpSuffix": "and optional",
+      "configurationHelpVariables": "variables.",
+      "seeExample": "See example",
+      "formatJson": "Format JSON",
+      "validJson": "Valid JSON",
+      "validJsonWithCount": "Valid JSON ({count} server(s))",
+      "invalidJson": "Invalid JSON",
+      "emptyConfiguration": "Empty configuration",
+      "errors": {
+        "mustBeArray": "Configuration must be an array",
+        "missingName": "Server {index}: missing name",
+        "missingCommandOrConnectionUrl": "Server {index}: missing command or connection_url"
+      },
+      "modal": {
+        "title": "About MCP",
+        "intro": "Model Context Protocol (MCP) lets GPT Researcher call external tools and data sources safely.",
+        "benefitsTitle": "Benefits",
+        "benefits": {
+          "localDataLabel": "Local data:",
+          "localDataDesc": "Connect local files and internal resources.",
+          "externalToolsLabel": "External tools:",
+          "externalToolsDesc": "Use specialized APIs and services from MCP servers.",
+          "extendLabel": "Extendability:",
+          "extendDesc": "Add custom capabilities without changing core code.",
+          "securityLabel": "Security:",
+          "securityDesc": "Keep tool access explicit and controlled."
+        },
+        "quickStartTitle": "Quick Start",
+        "quickStart": {
+          "enable": "Enable MCP in settings.",
+          "presets": "Try presets to bootstrap config quickly.",
+          "custom": "Add custom servers as needed.",
+          "start": "Start research and MCP tools will be used automatically."
+        },
+        "configurationFormatTitle": "Configuration Format",
+        "configurationFormatIntro": "Each server item can include these fields:",
+        "configurationFormat": {
+          "name": "Server name.",
+          "command": "Executable command.",
+          "args": "Command arguments array.",
+          "env": "Environment variables, e.g. {example}."
+        }
+      }
+    }
+  },
+  "sidebar": {
+    "openSidebar": "Open sidebar",
+    "closeSidebar": "Close sidebar",
+    "researchHistory": "Research History",
+    "noHistoryTitle": "No history yet",
+    "noHistoryDescription": "Your completed research will appear here.",
+    "deleteResearch": "Delete research"
+  },
+  "report": {
+    "researchReportTitle": "Research Report",
+    "similarTopicsTitle": "Similar Topics",
+    "accessReportTitle": "Access Report",
+    "viewAsPdf": "View as PDF",
+    "downloadDocx": "Download DOCX",
+    "downloadLogs": "Download Logs",
+    "relatedImages": "Related Images",
+    "agentWork": "Agent Work",
+    "sources": "Sources",
+    "sourcesCount": "{count, plural, one {# source} other {# sources}}"
+  },
+  "chat": {
+    "answerTitle": "Answer",
+    "askAboutReportTitle": "Ask about this report",
+    "askAboutReportDescription": "Ask follow-up questions and refine insights.",
+    "copilotAnalyzingDuringResearch": "I'm analyzing while your research is running.",
+    "copilotReadyMessage": "I'm ready. Ask anything about your report.",
+    "hideCopilotPanel": "Hide copilot panel",
+    "humanFeedbackRequired": "Human feedback required",
+    "humanFeedbackPlaceholder": "Add feedback for the researcher...",
+    "inputPlaceholder": "Ask a follow-up question...",
+    "newSources": "New sources",
+    "noAnswerAvailable": "No answer available",
+    "researchStopped": "Research has been stopped.",
+    "researchStoppedWithPrompt": "Research was stopped. Start a new research to continue."
+  },
+  "mobile": {
+    "viewHistory": "View history",
+    "viewAllHistory": "View all history",
+    "viewAllResearch": "View all research",
+    "homeIntro": "Start a research and chat with results on your phone.",
+    "homeInputPlaceholder": "What should I research for you?",
+    "homeHint": "Press Enter to submit, Shift+Enter for a new line.",
+    "recentResearch": "Recent Research",
+    "researchTipsTitle": "Tips",
+    "researchTips": {
+      "specificQuestions": "Ask specific questions for better results.",
+      "includeDetails": "Include scope, timeframe, and constraints.",
+      "chatDeeper": "Use follow-up chat to go deeper."
+    },
+    "chat": {
+      "welcome": "I'm ready to help. Ask follow-up questions anytime.",
+      "researchingMessage": "Research in progress. I'll share results shortly."
+    }
+  },
+  "errors": {
+    "somethingWentWrong": "Sorry, something went wrong. Please try again.",
+    "processingRequest": "Sorry, there was an error processing your request. Please try again.",
+    "invalidResponse": "Invalid response received. Please try again.",
+    "couldNotGenerateResearch": "Could not generate research. Please try again.",
+    "couldNotGenerateCompleteResponse": "Could not generate a complete response. Please try again.",
+    "couldNotLoadSelectedResearch": "Could not load selected research.",
+    "requestTimeout": "Request timed out. Please try again.",
+    "submissionProblem": "Submission failed. Please retry.",
+    "invalidServerResponse": "Invalid server response.",
+    "failedServerCommunication": "Failed to communicate with server.",
+    "failedSendMessage": "Failed to send message.",
+    "researchNotFoundTitle": "Research Not Found",
+    "researchNotFoundDescription": "This research item could not be found."
+  },
+  "toasts": {
+    "copiedToClipboard": "Copied to clipboard",
+    "failedCopyClipboard": "Failed to copy to clipboard",
+    "reportCopied": "Report copied to clipboard",
+    "urlCopied": "URL copied to clipboard",
+    "urlCopyFailed": "Failed to copy URL",
+    "serverConnectionErrorUsingLocal": "Server connection error. Using local data if available.",
+    "failedConnectUsingLocal": "Failed to connect to server. Using local data if available."
+  },
+  "metadata": {
+    "appName": "GPT Researcher",
+    "title": "GPT Researcher",
+    "description": "LLM based autonomous agent that conducts local and web research on any topic and generates a comprehensive report with citations."
+  }
+}

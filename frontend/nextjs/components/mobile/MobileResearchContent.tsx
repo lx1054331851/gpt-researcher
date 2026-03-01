@@ -3,6 +3,7 @@ import { useResearchHistoryContext } from "@/hooks/ResearchHistoryContext";
 import MobileChatPanel from "@/components/mobile/MobileChatPanel";
 import { ChatBoxSettings, Data, ChatData, QuestionData, ChatMessage } from "@/types/data";
 import { toast } from "react-hot-toast";
+import { useTranslations } from "next-intl";
 
 interface MobileResearchContentProps {
   orderedData: Data[];
@@ -31,6 +32,7 @@ export default function MobileResearchContent({
   currentResearchId,
   onShareClick
 }: MobileResearchContentProps) {
+  const t = useTranslations();
   // Access research history context for saving chat messages
   const { 
     addChatMessage, 
@@ -168,11 +170,11 @@ export default function MobileResearchContent({
         // Show error for invalid or empty response
         const errorData: ChatData = {
           type: 'chat',
-          content: 'Sorry, I couldn\'t generate a proper response. Please try again.'
+          content: t("errors.invalidResponse")
         };
         
         setLocalOrderedData(prev => [...prev, errorData]);
-        toast.error("Received an invalid response from the server", {
+        toast.error(t("errors.invalidServerResponse"), {
           duration: 3000,
           position: "bottom-center"
         });
@@ -183,11 +185,11 @@ export default function MobileResearchContent({
       
       const errorData: ChatData = {
         type: 'chat',
-        content: 'Sorry, there was an error processing your request. Please try again.'
+        content: t("errors.processingRequest")
       };
       
       setLocalOrderedData(prev => [...prev, errorData]);
-      toast.error("Failed to communicate with the server", {
+      toast.error(t("errors.failedServerCommunication"), {
         duration: 3000,
         position: "bottom-center"
       });
@@ -219,14 +221,14 @@ export default function MobileResearchContent({
               <>
                 <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse mr-2"></div>
                 <span className="text-xs text-gray-300">
-                  {localLoading ? "Researching..." : "Processing..."}
+                  {localLoading ? t("common.researching") : t("common.processing")}
                 </span>
               </>
             )}
             {!localLoading && !localProcessing && currentResearchId && (
               <>
                 <div className="w-2 h-2 rounded-full bg-teal-500 mr-2"></div>
-                <span className="text-xs text-gray-300">Research complete</span>
+                <span className="text-xs text-gray-300">{t("common.researchComplete")}</span>
               </>
             )}
           </div>
@@ -242,7 +244,7 @@ export default function MobileResearchContent({
                 <polyline points="16 6 12 2 8 6"></polyline>
                 <line x1="12" y1="2" x2="12" y2="15"></line>
               </svg>
-              Share
+              {t("common.share")}
             </button>
           )}
         </div>

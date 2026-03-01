@@ -2,6 +2,7 @@ import Image from "next/image";
 import React, { FC, useEffect, useState, useRef } from "react";
 import InputArea from "./ResearchBlocks/elements/InputArea";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslations } from "next-intl";
 
 type THeroProps = {
   promptValue: string;
@@ -14,6 +15,7 @@ const Hero: FC<THeroProps> = ({
   setPromptValue,
   handleDisplayResult,
 }) => {
+  const t = useTranslations();
   const [isVisible, setIsVisible] = useState(false);
   const [showGradient, setShowGradient] = useState(true);
   const particlesContainerRef = useRef<HTMLDivElement>(null);
@@ -92,6 +94,24 @@ const Hero: FC<THeroProps> = ({
     setPromptValue(value);
   };
 
+  const suggestions: suggestionType[] = [
+    {
+      id: 1,
+      name: t("hero.suggestions.stock"),
+      icon: "/img/stock2.svg",
+    },
+    {
+      id: 2,
+      name: t("hero.suggestions.adventure"),
+      icon: "/img/hiker.svg",
+    },
+    {
+      id: 3,
+      name: t("hero.suggestions.news"),
+      icon: "/img/news.svg",
+    },
+  ];
+
   // Animation variants for consistent animations
   const fadeInUp = {
     hidden: { opacity: 0, y: 20 },
@@ -116,7 +136,7 @@ const Hero: FC<THeroProps> = ({
           transition={{ duration: 0.8, delay: 0.1 }}
           className="text-2xl sm:text-3xl md:text-4xl font-medium text-center text-white mb-8 sm:mb-10 md:mb-12 px-4"
         >
-          What would you like to research next?
+          {t("hero.title")}
         </motion.h1>
 
         {/* Input section with enhanced styling */}
@@ -143,7 +163,7 @@ const Hero: FC<THeroProps> = ({
             className="mt-6 text-center px-4"
           >
             <p className="text-gray-400 text-sm font-light">
-              GPT Researcher may make mistakes. Verify important information and check sources.
+              {t("hero.disclaimer")}
             </p>
           </motion.div>
         </motion.div>
@@ -262,23 +282,5 @@ type suggestionType = {
   name: string;
   icon: string;
 };
-
-const suggestions: suggestionType[] = [
-  {
-    id: 1,
-    name: "Stock analysis on ",
-    icon: "/img/stock2.svg",
-  },
-  {
-    id: 2,
-    name: "Help me plan an adventure to ",
-    icon: "/img/hiker.svg",
-  },
-  {
-    id: 3,
-    name: "What are the latest news on ",
-    icon: "/img/news.svg",
-  },
-];
 
 export default Hero;

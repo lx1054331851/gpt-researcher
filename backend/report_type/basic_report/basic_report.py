@@ -16,6 +16,7 @@ class BasicReport:
         source_urls,
         document_urls,
         tone: Any,
+        language: str | None,
         config_path: str,
         websocket: WebSocket,
         headers=None,
@@ -29,6 +30,7 @@ class BasicReport:
         self.source_urls = source_urls
         self.document_urls = document_urls
         self.tone = tone
+        self.language = language
         self.config_path = config_path
         self.websocket = websocket
         self.headers = headers or {}
@@ -45,6 +47,7 @@ class BasicReport:
             "source_urls": self.source_urls,
             "document_urls": self.document_urls,
             "tone": self.tone,
+            "language": self.language,
             "config_path": self.config_path,
             "websocket": self.websocket,
             "headers": self.headers,

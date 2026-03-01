@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useState } from "react";
 import axios from 'axios';
 import { useDropzone } from 'react-dropzone';
 import {getHost} from "@/helpers/getHost"
+import { useTranslations } from "next-intl";
 
 const FileUpload = () => {
+  const t = useTranslations();
   const [files, setFiles] = useState([]);
   const host = getHost();
 
@@ -53,11 +55,11 @@ const FileUpload = () => {
     <div className={"mb-4 w-full"}>
       <div {...getRootProps()} style={{ border: '2px dashed #cccccc', padding: '20px', textAlign: 'center' }}>
         <input {...getInputProps()} />
-        <p>Drag &apos;n&apos; drop some files here, or click to select files</p>
+        <p>{t("settings.fileUpload.dropzone")}</p>
       </div>
       {files.length > 0 && (
           <>
-            <h2 className={"text-gray-900 mt-2 text-xl"}>Uploaded Files</h2>
+            <h2 className={"text-gray-900 mt-2 text-xl"}>{t("settings.fileUpload.uploadedFiles")}</h2>
             <ul role={"list"} className={"my-2 divide-y divide-gray-100"}>
               {files.map(file => (
                 <li key={file} className={"flex justify-between gap-x-6 py-1"}>

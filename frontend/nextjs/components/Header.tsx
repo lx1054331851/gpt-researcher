@@ -1,5 +1,6 @@
 import React from 'react';
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 
 interface HeaderProps {
   loading?: boolean;      // Indicates if research is currently in progress
@@ -11,6 +12,8 @@ interface HeaderProps {
 }
 
 const Header = ({ loading, isStopped, showResult, onStop, onNewResearch, isCopilotMode }: HeaderProps) => {
+  const t = useTranslations();
+
   return (
     <div className="fixed top-0 left-0 right-0 z-50">
       {/* Pure transparent blur background */}
@@ -38,7 +41,7 @@ const Header = ({ loading, isStopped, showResult, onStop, onNewResearch, isCopil
                 onClick={onStop}
                 className="flex items-center justify-center px-4 sm:px-6 h-9 sm:h-10 text-sm text-white bg-red-500 rounded-full hover:bg-red-600 transform hover:scale-105 transition-all duration-200 shadow-lg whitespace-nowrap min-w-[80px]"
               >
-                Stop
+                {t("common.stop")}
               </button>
             )}
             {/* New Research button - shown after stopping or completing research - but not in copilot mode */}
@@ -47,7 +50,7 @@ const Header = ({ loading, isStopped, showResult, onStop, onNewResearch, isCopil
                 onClick={onNewResearch}
                 className="flex items-center justify-center px-4 sm:px-6 h-9 sm:h-10 text-sm text-white bg-teal-500 rounded-full hover:bg-teal-600 transform hover:scale-105 transition-all duration-200 shadow-lg whitespace-nowrap min-w-[120px]"
               >
-                New Research
+                {t("common.newResearch")}
               </button>
             )}
           </div>

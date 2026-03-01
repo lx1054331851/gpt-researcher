@@ -15,11 +15,13 @@ import CopilotResearchContent from "@/components/research/CopilotResearchContent
 import NotFoundContent from "@/components/research/NotFoundContent";
 import LoadingDots from "@/components/LoadingDots";
 import ResearchSidebar from "@/components/ResearchSidebar";
+import { useTranslations } from "next-intl";
 
 // Import mobile components
 import MobileResearchContent from "@/components/mobile/MobileResearchContent";
 
 export default function ResearchPage({ params }: { params: { id: string } }) {
+  const t = useTranslations();
   const router = useRouter();
   const { id } = params;
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,7 @@ export default function ResearchPage({ params }: { params: { id: string } }) {
       report_source: "web",
       report_type: "research_report",
       tone: "Objective",
+      report_language: "english",
       domains: [],
       defaultReportType: "research_report",
       layoutType: 'copilot',
@@ -163,7 +166,7 @@ export default function ResearchPage({ params }: { params: { id: string } }) {
           // Only show error toast if we haven't shown a toast yet in this component instance
           if (!toastShownRef.current) {
             console.log('Showing backend error toast');
-            toast.error("Server connection error. Using local data if available.", {
+            toast.error(t("toasts.serverConnectionErrorUsingLocal"), {
               id: `server-error-${id}`, // Unique ID per research
             });
             toastShownRef.current = true;
@@ -191,7 +194,7 @@ export default function ResearchPage({ params }: { params: { id: string } }) {
         // Only show error toast if we haven't shown a toast yet in this component instance
         if (!toastShownRef.current) {
           console.log('Showing fetch error toast');
-          toast.error("Failed to connect to server. Using local data if available.", {
+          toast.error(t("toasts.failedConnectUsingLocal"), {
             id: `fetch-error-${id}`, // Unique ID per research
           });
           toastShownRef.current = true;
@@ -262,7 +265,7 @@ export default function ResearchPage({ params }: { params: { id: string } }) {
     };
     
     fetchResearch();
-  }, [id, fetchAttempted]);
+  }, [id, fetchAttempted, t]);
 
   // Process ordered data into logs for display
   useEffect(() => {
@@ -397,7 +400,7 @@ export default function ResearchPage({ params }: { params: { id: string } }) {
         // Show error message
         const errorChatData: ChatData = { 
           type: 'chat', 
-          content: 'Sorry, something went wrong. Please try again.' 
+          content: t("errors.somethingWentWrong")
         };
         setOrderedData(prevOrder => [...prevOrder, errorChatData]);
       }
@@ -407,7 +410,7 @@ export default function ResearchPage({ params }: { params: { id: string } }) {
       // Add error message
       const errorChatData: ChatData = { 
         type: 'chat', 
-        content: 'Sorry, there was an error processing your request. Please try again.' 
+        content: t("errors.processingRequest")
       };
       setOrderedData(prevOrder => [...prevOrder, errorChatData]);
     } finally {
@@ -423,12 +426,12 @@ export default function ResearchPage({ params }: { params: { id: string } }) {
     const url = window.location.href;
     navigator.clipboard.writeText(url)
       .then(() => {
-        toast.success("URL copied to clipboard!", {
+        toast.success(t("toasts.urlCopied"), {
           id: `copy-success-${id}`, // Unique ID per research
         });
       })
       .catch(() => {
-        toast.error("Failed to copy URL", {
+        toast.error(t("toasts.urlCopyFailed"), {
           id: `copy-error-${id}`, // Unique ID per research
         });
       });

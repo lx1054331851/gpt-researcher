@@ -5,6 +5,7 @@ import { Data } from '@/types/data';
 import Question from '@/components/ResearchBlocks/Question';
 import ChatResponse from '@/components/ResearchBlocks/ChatResponse';
 import Image from 'next/image';
+import { useTranslations } from "next-intl";
 
 interface CopilotPanelProps {
   question: string;
@@ -33,6 +34,7 @@ const CopilotPanel: React.FC<CopilotPanelProps> = ({
   isCopilotVisible,
   setIsCopilotVisible
 }) => {
+  const t = useTranslations();
   // Filter to only get chat messages (questions and responses) after the initial question
   const chatMessages = orderedData.filter((data, index) => {
     // Include all questions except the first one
@@ -89,7 +91,7 @@ const CopilotPanel: React.FC<CopilotPanelProps> = ({
             />
           </a>
           <h2 className="text-base font-medium text-gray-200">
-            GPT Researcher
+            {t("metadata.appName")}
           </h2>
         </div>
         
@@ -98,7 +100,7 @@ const CopilotPanel: React.FC<CopilotPanelProps> = ({
           {/* Connection status indicator */}
           <div className="flex items-center">
             <div className={`w-1.5 h-1.5 rounded-full ${loading || isProcessingChat ? 'bg-amber-500 animate-pulse' : 'bg-teal-500'} mr-2`}></div>
-            <span className="text-xs text-gray-400">{loading ? 'researching' : isProcessingChat ? 'thinking' : 'active'}</span>
+            <span className="text-xs text-gray-400">{loading ? t("common.researching") : isProcessingChat ? t("common.thinking") : t("common.active")}</span>
           </div>
           
           {/* Toggle button */}
@@ -109,7 +111,7 @@ const CopilotPanel: React.FC<CopilotPanelProps> = ({
                 setIsCopilotVisible(false);
               }}
               className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors border border-transparent hover:border-gray-700/50"
-              aria-label="Hide copilot panel"
+              aria-label={t("chat.hideCopilotPanel")}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 18l6-6-6-6" />
@@ -135,9 +137,9 @@ const CopilotPanel: React.FC<CopilotPanelProps> = ({
               </div>
               <div className="text-gray-300 text-sm">
                 {loading ? (
-                  <p>Working on your research... I&apos;ll analyze the results once they&apos;re complete.</p>
+                  <p>{t("chat.copilotAnalyzingDuringResearch")}</p>
                 ) : (
-                  <p>I&apos;ve analyzed all the research results and can answer any questions about it. How can I help?</p>
+                  <p>{t("chat.copilotReadyMessage")}</p>
                 )}
               </div>
             </div>
@@ -189,7 +191,7 @@ const CopilotPanel: React.FC<CopilotPanelProps> = ({
         )}
         {isStopped && (
           <div className="text-center p-2 text-gray-400 bg-gray-800/40 rounded-md border border-gray-700/40 text-sm">
-            Research has been stopped. Start a new research to continue chatting.
+            {t("chat.researchStoppedWithPrompt")}
           </div>
         )}
       </div>

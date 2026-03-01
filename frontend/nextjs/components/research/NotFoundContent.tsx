@@ -1,10 +1,13 @@
 import React from 'react';
+import { useTranslations } from "next-intl";
 
 interface NotFoundContentProps {
   onNewResearch: () => void;
 }
 
 export default function NotFoundContent({ onNewResearch }: NotFoundContentProps) {
+  const t = useTranslations();
+
   return (
     <div className="min-h-[100vh] pt-[70px] flex flex-col items-center justify-center">
       <div className="text-center max-w-md mx-auto">
@@ -13,13 +16,13 @@ export default function NotFoundContent({ onNewResearch }: NotFoundContentProps)
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <h2 className="text-2xl font-bold text-gray-100 mb-2">Research Not Found</h2>
-        <p className="text-gray-400 mb-6">The research report you&apos;re looking for doesn&apos;t seem to exist or might have been deleted.</p>
+        <h2 className="text-2xl font-bold text-gray-100 mb-2">{t("errors.researchNotFoundTitle")}</h2>
+        <p className="text-gray-400 mb-6">{t("errors.researchNotFoundDescription")}</p>
         <button 
           onClick={onNewResearch}
           className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-md transition-colors"
         >
-          Return to Home
+          {t("common.returnHome")}
         </button>
       </div>
     </div>

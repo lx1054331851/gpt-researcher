@@ -11,6 +11,7 @@ import { Data, ChatBoxSettings, QuestionData, ChatMessage, ChatData } from '../t
 import { preprocessOrderedData } from '../utils/dataProcessing';
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from 'uuid';
+import { useTranslations } from "next-intl";
 
 import Hero from "@/components/Hero";
 import ResearchPageLayout from "@/components/layouts/ResearchPageLayout";
@@ -26,6 +27,7 @@ import MobileHomeScreen from "@/components/mobile/MobileHomeScreen";
 import MobileResearchContent from "@/components/mobile/MobileResearchContent";
 
 export default function Home() {
+  const t = useTranslations();
   const router = useRouter();
   const [promptValue, setPromptValue] = useState("");
   const [chatPromptValue, setChatPromptValue] = useState("");
@@ -39,6 +41,7 @@ export default function Home() {
       report_type: "research_report",
       report_source: "web",
       tone: "Objective",
+      report_language: "english",
       domains: [],
       defaultReportType: "research_report",
       layoutType: 'copilot',
@@ -220,7 +223,7 @@ export default function Home() {
           // Show error message
           setOrderedData(prevOrder => [...prevOrder, { 
             type: 'chat', 
-            content: 'Sorry, something went wrong. Please try again.' 
+            content: t("errors.somethingWentWrong")
           } as ChatData]);
         }
       } catch (error) {
@@ -229,7 +232,7 @@ export default function Home() {
         // Add error message
         setOrderedData(prevOrder => [...prevOrder, { 
           type: 'chat', 
-          content: 'Sorry, there was an error processing your request. Please try again.' 
+          content: t("errors.processingRequest")
         } as ChatData]);
       } finally {
         setIsProcessingChat(false);
@@ -276,7 +279,7 @@ export default function Home() {
           // Show error message in results
           setOrderedData(prevOrder => [...prevOrder, { 
             type: 'chat', 
-            content: 'I apologize, but I couldn\'t generate a proper response. Please try asking your question again.' 
+            content: t("errors.invalidResponse") 
           }]);
         } else {
           // Add AI response to chat history asynchronously
@@ -304,7 +307,7 @@ export default function Home() {
         // Show error message
         setOrderedData(prevOrder => [...prevOrder, { 
           type: 'chat', 
-          content: 'Sorry, something went wrong. Please try again.' 
+          content: t("errors.somethingWentWrong")
         }]);
       }
     } catch (error) {
@@ -313,7 +316,7 @@ export default function Home() {
       // Add error message to display
       setOrderedData(prevOrder => [...prevOrder, { 
         type: 'chat', 
-        content: 'Sorry, there was an error processing your request. Please try again.' 
+        content: t("errors.processingRequest")
       }]);
     } finally {
       setLoading(false);
@@ -396,7 +399,7 @@ export default function Home() {
           // Handle error
           setOrderedData(prevOrder => [...prevOrder, { 
             type: 'chat', 
-            content: 'Sorry, I couldn\'t generate a research response. Please try again.' 
+            content: t("errors.couldNotGenerateResearch")
           } as ChatData]);
         }
       } catch (error) {
@@ -404,7 +407,7 @@ export default function Home() {
         // Show error message
         setOrderedData(prevOrder => [...prevOrder, { 
           type: 'chat', 
-          content: 'Sorry, there was an error processing your request. Please try again.' 
+          content: t("errors.processingRequest")
         } as ChatData]);
       } finally {
         setLoading(false);
@@ -534,7 +537,7 @@ export default function Home() {
           ...prevData, 
           { 
             type: 'chat', 
-            content: "I'm sorry, I couldn't generate a complete response. Please try rephrasing your question." 
+            content: t("errors.couldNotGenerateCompleteResponse")
           } as ChatData
         ]);
       }
@@ -546,7 +549,7 @@ export default function Home() {
         ...prevData, 
         { 
           type: 'chat', 
-          content: "Sorry, there was an error processing your request. Please try again." 
+          content: t("errors.processingRequest")
         } as ChatData
       ]);
     } finally {
@@ -636,7 +639,7 @@ export default function Home() {
         // Show error message
         setOrderedData(prevOrder => [...prevOrder, { 
           type: 'chat', 
-          content: 'Sorry, something went wrong. Please try again.' 
+          content: t("errors.somethingWentWrong")
         } as ChatData]);
       }
     } catch (error) {
@@ -645,7 +648,7 @@ export default function Home() {
       // Add error message
       setOrderedData(prevOrder => [...prevOrder, { 
         type: 'chat', 
-        content: 'Sorry, there was an error processing your request. Please try again.' 
+        content: t("errors.processingRequest")
       } as ChatData]);
     } finally {
       setIsProcessingChat(false);
@@ -723,10 +726,10 @@ export default function Home() {
     const url = `${window.location.origin}/research/${currentResearchId}`;
     navigator.clipboard.writeText(url)
       .then(() => {
-        toast.success("URL copied to clipboard!");
+        toast.success(t("toasts.urlCopied"));
       })
       .catch(() => {
-        toast.error("Failed to copy URL");
+        toast.error(t("toasts.urlCopyFailed"));
       });
   };
 
@@ -799,7 +802,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error selecting research:', error);
-      toast.error('Could not load the selected research');
+      toast.error(t("errors.couldNotLoadSelectedResearch"));
     }
   };
 

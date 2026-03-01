@@ -18,6 +18,7 @@ class DetailedReport:
         query_domains: List[str] = [],
         config_path: str = None,
         tone: Any = "",
+        language: str | None = None,
         websocket: WebSocket = None,
         subtopics: List[Dict] = [],
         headers: Optional[Dict] = None,
@@ -33,6 +34,7 @@ class DetailedReport:
         self.query_domains = query_domains
         self.config_path = config_path
         self.tone = tone
+        self.language = language
         self.websocket = websocket
         self.subtopics = subtopics
         self.headers = headers or {}
@@ -51,6 +53,7 @@ class DetailedReport:
             "document_urls": self.document_urls,
             "config_path": self.config_path,
             "tone": self.tone,
+            "language": self.language,
             "websocket": self.websocket,
             "headers": self.headers,
             "complement_source_urls": self.complement_source_urls,
@@ -128,6 +131,7 @@ class DetailedReport:
             agent=self.gpt_researcher.agent,
             role=self.gpt_researcher.role,
             tone=self.tone,
+            language=self.language,
             complement_source_urls=self.complement_source_urls,
             source_urls=self.source_urls,
             # Propagate MCP configuration so follow-up researchers can use MCP

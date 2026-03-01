@@ -3,6 +3,7 @@ import { toast } from "react-hot-toast";
 import { markdownToHtml } from '../../helpers/markdownHelper';
 import '../../styles/markdown.css';
 import Sources from './Sources';
+import { useTranslations } from "next-intl";
 
 interface ChatResponseProps {
   answer: string;
@@ -23,6 +24,7 @@ interface ChatResponseProps {
 }
 
 export default function ChatResponse({ answer, metadata }: ChatResponseProps) {
+    const t = useTranslations();
     const [htmlContent, setHtmlContent] = useState('');
     
     // Check if we have sources from a web search tool call
@@ -46,17 +48,17 @@ export default function ChatResponse({ answer, metadata }: ChatResponseProps) {
     }, [answer]);
     
     // Format the answer for display
-    const formattedAnswer = answer.trim() || 'No answer available.';
+    const formattedAnswer = answer.trim() || t("chat.noAnswerAvailable");
     
     const copyToClipboard = () => {
         // Copy the plain text of the answer instead of the HTML
         navigator.clipboard.writeText(formattedAnswer)
             .then(() => {
-                toast.success('Copied to clipboard!');
+                toast.success(t("toasts.copiedToClipboard"));
             })
             .catch((err) => {
                 console.error('Failed to copy: ', err);
-                toast.error('Failed to copy to clipboard');
+                toast.error(t("toasts.failedCopyClipboard"));
             });
     };
   
@@ -70,13 +72,13 @@ export default function ChatResponse({ answer, metadata }: ChatResponseProps) {
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               </div>
-              <h3 className="text-sm font-medium text-teal-200">Answer</h3>
+              <h3 className="text-sm font-medium text-teal-200">{t("chat.answerTitle")}</h3>
             </div>
             <button 
               onClick={copyToClipboard}
               className="hover:opacity-80 transition-opacity duration-200"
-              aria-label="Copy to clipboard"
-              title="Copy to clipboard"
+              aria-label={t("common.copyToClipboard")}
+              title={t("common.copyToClipboard")}
             >
               <img
                 src="/img/copy-white.svg"
@@ -108,7 +110,7 @@ export default function ChatResponse({ answer, metadata }: ChatResponseProps) {
                     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                   </svg>
                 </div>
-                <span className="text-xs font-medium text-blue-300">New Sources</span>
+                <span className="text-xs font-medium text-blue-300">{t("chat.newSources")}</span>
               </div>
               <Sources sources={webSources} compact={true} />
             </div>

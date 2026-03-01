@@ -78,6 +78,7 @@ class GPTResearcher:
         mcp_configs: list[dict] | None = None,
         mcp_max_iterations: int | None = None,
         mcp_strategy: str | None = None,
+        language: str | None = None,
         **kwargs
     ):
         """
@@ -137,6 +138,8 @@ class GPTResearcher:
         self.query = query
         self.report_type = report_type
         self.cfg = Config(config_path)
+        if language:
+            self.cfg.language = language
         self.cfg.set_verbose(verbose)
         self.report_source = report_source if report_source else getattr(self.cfg, 'report_source', None)
         self.report_format = report_format

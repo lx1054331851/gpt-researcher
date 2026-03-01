@@ -1,6 +1,7 @@
 import Image from "next/image";
 import React from 'react';
 import SourceCard from "./elements/SourceCard";
+import { useTranslations } from "next-intl";
 
 export default function Sources({
   sources,
@@ -9,6 +10,8 @@ export default function Sources({
   sources: { name: string; url: string }[];
   compact?: boolean;
 }) {
+  const t = useTranslations();
+
   if (compact) {
     // Compact version for chat responses
     return (
@@ -53,7 +56,7 @@ export default function Sources({
       <div className="flex items-start gap-4 pb-3 lg:pb-3.5">
         <img src="/img/browser.svg" alt="sources" width={24} height={24} />
         <h3 className="text-base font-bold uppercase leading-[152.5%] text-white">
-          {sources.length} Sources{" "}
+          {t("report.sourcesCount", { count: sources.length })}
         </h3>
       </div>
       <div className="overflow-y-auto max-h-[250px] scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-300/10">

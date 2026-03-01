@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 
 const SimilarTopics = ({
   similarQuestions,
@@ -9,6 +10,8 @@ const SimilarTopics = ({
   handleDisplayResult: (item: string) => void;
   reset: () => void;
 }) => {
+  const t = useTranslations();
+
   return (
     <div className="container flex h-auto w-full shrink-0 gap-4 rounded-lg border border-solid border-[#C2C2C2] bg-white p-5 lg:p-10">
       <div className="hidden lg:block">
@@ -29,7 +32,7 @@ const SimilarTopics = ({
             className="block lg:hidden"
           />
           <h3 className="text-base font-bold uppercase text-black">
-            Similar topics:{" "}
+            {t("report.similarTopicsTitle")}
           </h3>
         </div>
 

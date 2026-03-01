@@ -1,6 +1,7 @@
 import Image from "next/image";
 import React, { FC, useRef, useState, useEffect } from "react";
 import TypeAnimation from "../../TypeAnimation";
+import { useTranslations } from "next-intl";
 
 type TChatInputProps = {
   promptValue: string;
@@ -28,9 +29,10 @@ const ChatInput: FC<TChatInputProps> = ({
   handleSubmit,
   disabled,
 }) => {
+  const t = useTranslations();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isFocused, setIsFocused] = useState(false);
-  const placeholder = "Any questions about this report?";
+  const placeholder = t("chat.inputPlaceholder");
 
   const resetHeight = () => {
     if (textareaRef.current) {

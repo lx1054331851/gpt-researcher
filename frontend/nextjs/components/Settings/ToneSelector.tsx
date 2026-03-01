@@ -1,13 +1,16 @@
 import React, { ChangeEvent } from 'react';
+import { useTranslations } from "next-intl";
 
 interface ToneSelectorProps {
   tone: string;
   onToneChange: (event: ChangeEvent<HTMLSelectElement>) => void;
 }
 export default function ToneSelector({ tone, onToneChange }: ToneSelectorProps) {
+  const t = useTranslations();
+
   return (
     <div className="form-group">
-      <label htmlFor="tone" className="agent_question">Tone </label>
+      <label htmlFor="tone" className="agent_question">{t("settings.toneLabel")}</label>
       <select 
         name="tone" 
         id="tone" 
@@ -16,23 +19,23 @@ export default function ToneSelector({ tone, onToneChange }: ToneSelectorProps) 
         className="form-control-static"
         required
       >
-        <option value="Objective">Objective - Impartial and unbiased presentation of facts and findings</option>
-        <option value="Formal">Formal - Adheres to academic standards with sophisticated language and structure</option>
-        <option value="Analytical">Analytical - Critical evaluation and detailed examination of data and theories</option>
-        <option value="Persuasive">Persuasive - Convincing the audience of a particular viewpoint or argument</option>
-        <option value="Informative">Informative - Providing clear and comprehensive information on a topic</option>
-        <option value="Explanatory">Explanatory - Clarifying complex concepts and processes</option>
-        <option value="Descriptive">Descriptive - Detailed depiction of phenomena, experiments, or case studies</option>
-        <option value="Critical">Critical - Judging the validity and relevance of the research and its conclusions</option>
-        <option value="Comparative">Comparative - Juxtaposing different theories, data, or methods to highlight differences and similarities</option>
-        <option value="Speculative">Speculative - Exploring hypotheses and potential implications or future research directions</option>
-        <option value="Reflective">Reflective - Considering the research process and personal insights or experiences</option>
-        <option value="Narrative">Narrative - Telling a story to illustrate research findings or methodologies</option>
-        <option value="Humorous">Humorous - Light-hearted and engaging, usually to make the content more relatable</option>
-        <option value="Optimistic">Optimistic - Highlighting positive findings and potential benefits</option>
-        <option value="Pessimistic">Pessimistic - Focusing on limitations, challenges, or negative outcomes</option>
-        <option value="Simple">Simple - Written for young readers, using basic vocabulary and clear explanations</option>
-        <option value="Casual">Casual - Conversational and relaxed style for easy, everyday reading</option>
+        <option value="Objective">{t("settings.toneOptions.Objective")}</option>
+        <option value="Formal">{t("settings.toneOptions.Formal")}</option>
+        <option value="Analytical">{t("settings.toneOptions.Analytical")}</option>
+        <option value="Persuasive">{t("settings.toneOptions.Persuasive")}</option>
+        <option value="Informative">{t("settings.toneOptions.Informative")}</option>
+        <option value="Explanatory">{t("settings.toneOptions.Explanatory")}</option>
+        <option value="Descriptive">{t("settings.toneOptions.Descriptive")}</option>
+        <option value="Critical">{t("settings.toneOptions.Critical")}</option>
+        <option value="Comparative">{t("settings.toneOptions.Comparative")}</option>
+        <option value="Speculative">{t("settings.toneOptions.Speculative")}</option>
+        <option value="Reflective">{t("settings.toneOptions.Reflective")}</option>
+        <option value="Narrative">{t("settings.toneOptions.Narrative")}</option>
+        <option value="Humorous">{t("settings.toneOptions.Humorous")}</option>
+        <option value="Optimistic">{t("settings.toneOptions.Optimistic")}</option>
+        <option value="Pessimistic">{t("settings.toneOptions.Pessimistic")}</option>
+        <option value="Simple">{t("settings.toneOptions.Simple")}</option>
+        <option value="Casual">{t("settings.toneOptions.Casual")}</option>
       </select>
     </div>
   );

@@ -1,0 +1,235 @@
+{
+  "common": {
+    "active": "在线",
+    "cancel": "取消",
+    "copyToClipboard": "复制到剪贴板",
+    "copyright": "版权所有 © {year} GPT Researcher",
+    "newResearch": "新建研究",
+    "processing": "处理中...",
+    "researchComplete": "研究完成",
+    "researching": "研究中...",
+    "returnHome": "返回首页",
+    "saveChanges": "保存更改",
+    "settings": "设置",
+    "share": "分享",
+    "shareReport": "分享报告",
+    "startNewResearch": "开始新研究",
+    "startResearch": "开始研究",
+    "stop": "停止",
+    "submit": "提交",
+    "thinking": "思考中...",
+    "unknownTime": "未知时间"
+  },
+  "hero": {
+    "title": "今天想研究什么？",
+    "disclaimer": "GPT Researcher 可能会出错，请核实关键信息。",
+    "inputPlaceholder": "输入你的研究问题...",
+    "suggestions": {
+      "stock": "分析英伟达近期股价表现和后续走势",
+      "adventure": "规划一条 10 天的巴塔哥尼亚探险路线",
+      "news": "总结本周最重要的 AI 新闻"
+    }
+  },
+  "settings": {
+    "preferencesTitle": "偏好设置",
+    "reportSettingsTab": "报告设置",
+    "reportTypeLabel": "报告类型",
+    "reportType": {
+      "summary": "摘要报告",
+      "deep": "深度研究",
+      "multiAgents": "多智能体",
+      "detailed": "详细报告"
+    },
+    "reportSourceLabel": "报告来源",
+    "reportSource": {
+      "web": "网络",
+      "local": "本地文件",
+      "hybrid": "网络 + 本地"
+    },
+    "reportLanguageLabel": "报告语言",
+    "reportLanguage": {
+      "english": "英文",
+      "chinese": "中文"
+    },
+    "uiLanguageLabel": "界面语言",
+    "uiLanguage": {
+      "en": "English (en)",
+      "zh-CN": "简体中文 (zh-CN)"
+    },
+    "toneLabel": "语气",
+    "toneOptions": {
+      "Objective": "客观",
+      "Formal": "正式",
+      "Analytical": "分析型",
+      "Persuasive": "说服型",
+      "Informative": "信息型",
+      "Explanatory": "解释型",
+      "Descriptive": "描述型",
+      "Critical": "批判型",
+      "Comparative": "对比型",
+      "Speculative": "推演型",
+      "Reflective": "反思型",
+      "Narrative": "叙事型",
+      "Humorous": "幽默",
+      "Optimistic": "乐观",
+      "Pessimistic": "悲观",
+      "Simple": "简明",
+      "Casual": "随意"
+    },
+    "layoutLabel": "布局",
+    "layoutOptions": {
+      "research": "研究",
+      "copilot": "副驾驶",
+      "copilotMobile": "副驾驶",
+      "documentMobile": "文档"
+    },
+    "domainFilter": {
+      "label": "域名过滤",
+      "placeholder": "例如：nature.com",
+      "add": "添加"
+    },
+    "fileUpload": {
+      "dropzone": "将文件拖到这里，或点击上传",
+      "uploadedFiles": "已上传文件"
+    },
+    "mcp": {
+      "enable": "启用 MCP",
+      "learnMore": "了解更多",
+      "subtitle": "连接 Model Context Protocol 服务，扩展工具与数据访问能力。",
+      "quickPresets": "快捷预设",
+      "presetGithub": "GitHub",
+      "presetTavily": "Tavily",
+      "presetFilesystem": "文件系统",
+      "presetsHelp": "可选择一个或多个预设，自动填充可用的 MCP 配置。",
+      "configurationTitle": "MCP 配置",
+      "configurationPlaceholder": "以 JSON 数组形式粘贴 MCP 服务配置",
+      "configurationHelp": "每个服务配置应包含",
+      "configurationHelpSuffix": "以及可选的",
+      "configurationHelpVariables": "变量。",
+      "seeExample": "查看示例",
+      "formatJson": "格式化 JSON",
+      "validJson": "JSON 有效",
+      "validJsonWithCount": "JSON 有效（{count} 个服务）",
+      "invalidJson": "JSON 无效",
+      "emptyConfiguration": "空配置",
+      "errors": {
+        "mustBeArray": "配置必须是数组",
+        "missingName": "服务 {index}：缺少 name",
+        "missingCommandOrConnectionUrl": "服务 {index}：缺少 command 或 connection_url"
+      },
+      "modal": {
+        "title": "关于 MCP",
+        "intro": "Model Context Protocol（MCP）让 GPT Researcher 可以安全调用外部工具和数据源。",
+        "benefitsTitle": "优势",
+        "benefits": {
+          "localDataLabel": "本地数据：",
+          "localDataDesc": "可连接本地文件和内部资源。",
+          "externalToolsLabel": "外部工具：",
+          "externalToolsDesc": "通过 MCP 服务使用专用 API 与服务。",
+          "extendLabel": "可扩展性：",
+          "extendDesc": "无需修改核心代码即可添加能力。",
+          "securityLabel": "安全性：",
+          "securityDesc": "工具访问明确可控。"
+        },
+        "quickStartTitle": "快速开始",
+        "quickStart": {
+          "enable": "在设置中启用 MCP。",
+          "presets": "先用预设快速初始化配置。",
+          "custom": "按需添加自定义服务。",
+          "start": "开始研究后，系统会自动使用 MCP 工具。"
+        },
+        "configurationFormatTitle": "配置格式",
+        "configurationFormatIntro": "每个服务项可包含以下字段：",
+        "configurationFormat": {
+          "name": "服务名称。",
+          "command": "可执行命令。",
+          "args": "命令参数数组。",
+          "env": "环境变量，例如 {example}。"
+        }
+      }
+    }
+  },
+  "sidebar": {
+    "openSidebar": "打开侧边栏",
+    "closeSidebar": "关闭侧边栏",
+    "researchHistory": "研究历史",
+    "noHistoryTitle": "暂无历史",
+    "noHistoryDescription": "完成的研究会显示在这里。",
+    "deleteResearch": "删除研究"
+  },
+  "report": {
+    "researchReportTitle": "研究报告",
+    "similarTopicsTitle": "相似主题",
+    "accessReportTitle": "访问报告",
+    "viewAsPdf": "查看 PDF",
+    "downloadDocx": "下载 DOCX",
+    "downloadLogs": "下载日志",
+    "relatedImages": "相关图片",
+    "agentWork": "智能体工作记录",
+    "sources": "来源",
+    "sourcesCount": "{count} 个来源"
+  },
+  "chat": {
+    "answerTitle": "回答",
+    "askAboutReportTitle": "继续提问",
+    "askAboutReportDescription": "围绕这份报告继续追问并细化洞察。",
+    "copilotAnalyzingDuringResearch": "研究进行中，我正在持续分析。",
+    "copilotReadyMessage": "我已准备好，可以继续提问这份报告。",
+    "hideCopilotPanel": "隐藏副驾驶面板",
+    "humanFeedbackRequired": "需要人工反馈",
+    "humanFeedbackPlaceholder": "输入给研究助手的反馈...",
+    "inputPlaceholder": "输入追问问题...",
+    "newSources": "新增来源",
+    "noAnswerAvailable": "暂无可用回答",
+    "researchStopped": "研究已停止。",
+    "researchStoppedWithPrompt": "研究已停止。开始新研究以继续。"
+  },
+  "mobile": {
+    "viewHistory": "查看历史",
+    "viewAllHistory": "查看全部历史",
+    "viewAllResearch": "查看全部研究",
+    "homeIntro": "在手机上发起研究，并继续围绕结果对话。",
+    "homeInputPlaceholder": "你希望我帮你研究什么？",
+    "homeHint": "回车提交，Shift+回车换行。",
+    "recentResearch": "最近研究",
+    "researchTipsTitle": "小贴士",
+    "researchTips": {
+      "specificQuestions": "问题越具体，结果越准确。",
+      "includeDetails": "建议补充范围、时间和约束条件。",
+      "chatDeeper": "可通过追问进一步深入。"
+    },
+    "chat": {
+      "welcome": "我已就绪，随时可以继续追问。",
+      "researchingMessage": "研究进行中，我会尽快返回结果。"
+    }
+  },
+  "errors": {
+    "somethingWentWrong": "抱歉，出现了一些问题，请重试。",
+    "processingRequest": "抱歉，处理请求时发生错误，请重试。",
+    "invalidResponse": "收到无效响应，请重试。",
+    "couldNotGenerateResearch": "未能生成研究结果，请重试。",
+    "couldNotGenerateCompleteResponse": "未能生成完整回答，请重试。",
+    "couldNotLoadSelectedResearch": "无法加载所选研究。",
+    "requestTimeout": "请求超时，请重试。",
+    "submissionProblem": "提交失败，请重试。",
+    "invalidServerResponse": "服务器响应无效。",
+    "failedServerCommunication": "与服务器通信失败。",
+    "failedSendMessage": "发送消息失败。",
+    "researchNotFoundTitle": "未找到研究",
+    "researchNotFoundDescription": "找不到该研究记录。"
+  },
+  "toasts": {
+    "copiedToClipboard": "已复制到剪贴板",
+    "failedCopyClipboard": "复制失败",
+    "reportCopied": "报告已复制到剪贴板",
+    "urlCopied": "链接已复制到剪贴板",
+    "urlCopyFailed": "复制链接失败",
+    "serverConnectionErrorUsingLocal": "服务器连接异常，将优先使用本地数据（如有）。",
+    "failedConnectUsingLocal": "无法连接服务器，将优先使用本地数据（如有）。"
+  },
+  "metadata": {
+    "appName": "GPT Researcher",
+    "title": "GPT Researcher",
+    "description": "基于大语言模型的自主研究助手，可对任意主题进行本地与网络研究，并生成带引用的综合报告。"
+  }
+}

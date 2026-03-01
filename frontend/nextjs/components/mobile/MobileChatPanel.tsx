@@ -8,6 +8,7 @@ import Link from "next/link";
 const cn = (...classes: (string | undefined)[]) => classes.filter(Boolean).join(' ');
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslations } from "next-intl";
 // Remove SendIcon import and use inline SVG instead
 
 interface MobileChatPanelProps {
@@ -28,12 +29,16 @@ const ChatMessage = memo(({
   type, 
   content, 
   html, 
-  metadata 
+  metadata,
+  sourcesLabel,
+  newSourcesLabel,
 }: { 
   type: string, 
   content: string, 
   html: string, 
-  metadata?: any 
+  metadata?: any,
+  sourcesLabel: string,
+  newSourcesLabel: string,
 }) => {
   if (type === 'question') {
     // User question - now with teal/turquoise color to match theme
@@ -95,7 +100,7 @@ const ChatMessage = memo(({
               <div className="mt-2 pt-2 border-t border-gray-700/50 text-xs text-gray-200">
                 <details className="group">
                   <summary className="cursor-pointer hover:text-white flex items-center">
-                    <span className="mr-1">Sources</span>
+                    <span className="mr-1">{sourcesLabel}</span>
                     <svg className="h-3 w-3 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                     </svg>
@@ -131,7 +136,7 @@ const ChatMessage = memo(({
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                 </svg>
               </div>
-              <span className="text-xs font-medium text-blue-300">Sources</span>
+              <span className="text-xs font-medium text-blue-300">{newSourcesLabel}</span>
             </div>
             <div className="max-h-[180px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-300/10">
               <div className="flex w-full flex-wrap content-center items-center gap-2">
@@ -199,6 +204,7 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
   onNewResearch,
   className
 }) => {
+  const t = useTranslations();
   const [inputFocused, setInputFocused] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -307,11 +313,11 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
       }, 100);
     } catch (error) {
       console.error('Error submitting chat:', error);
-      toast.error('Failed to send message. Please try again.');
+      toast.error(t("errors.failedSendMessage"));
     } finally {
       setIsSubmitting(false);
     }
-  }, [chatPromptValue, isProcessingChat, isSubmitting, isStopped, setChatPromptValue, handleChat]);
+  }, [chatPromptValue, isProcessingChat, isSubmitting, isStopped, setChatPromptValue, handleChat, t]);
   
   // Handle keyboard shortcuts - memoized
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -407,7 +413,7 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
               <img src="/img/gptr-logo.png" alt="AI" className="w-6 h-6" />
             </div>
             <div className="flex-1 ai-message-bubble rounded-2xl p-4 text-sm text-white shadow-lg">
-              <p>Hi there! I&apos;m your research assistant. Type your question and I&apos;ll help you find information and insights.</p>
+              <p>{t("mobile.chat.welcome")}</p>
             </div>
           </div>
         )}
@@ -419,7 +425,7 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
               <img src="/img/gptr-logo.png" alt="AI" className="w-6 h-6" />
             </div>
             <div className="flex-1 ai-message-bubble rounded-2xl p-4 text-sm text-white shadow-lg">
-              <p>I&apos;m researching your question. This may take a moment...</p>
+              <p>{t("mobile.chat.researchingMessage")}</p>
               <div className="mt-2 flex justify-center">
                 <LoadingDots />
               </div>
@@ -435,6 +441,8 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
             content={message.content}
             html={message.html}
             metadata={message.metadata}
+            sourcesLabel={t("report.sources")}
+            newSourcesLabel={t("chat.newSources")}
           />
         ))}
         
@@ -466,7 +474,7 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
               onKeyDown={handleKeyDown}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
-              placeholder="Ask a research question..."
+              placeholder={t("chat.inputPlaceholder")}
               className="w-full px-4 py-3 pr-14 bg-gray-800/90 border border-gray-700 focus:border-teal-500 rounded-xl resize-none text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-teal-500/50 transition-all shadow-sm"
               style={{ minHeight: '48px', maxHeight: '120px' }}
               disabled={isProcessingChat || isSubmitting}
@@ -495,13 +503,13 @@ const MobileChatPanel: React.FC<MobileChatPanelProps> = ({
           </form>
         ) : (
           <div className="text-center p-3 text-gray-300 bg-gray-800/60 rounded-xl border border-gray-700/50 text-sm shadow-sm">
-            Research has been stopped. 
+            {t("chat.researchStopped")}
             {onNewResearch && (
               <button 
                 onClick={onNewResearch} 
                 className="ml-2 text-teal-400 hover:text-teal-300 hover:underline font-medium"
               >
-                Start new research
+                {t("common.startNewResearch")}
               </button>
             )}
           </div>

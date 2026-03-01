@@ -4,6 +4,7 @@ import ChatBox from './ChatBox';
 import { ChatBoxSettings } from '@/types/data';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslations } from "next-intl";
 
 interface ChatBoxProps {
   chatBoxSettings: ChatBoxSettings;
@@ -15,6 +16,7 @@ interface Domain {
 }
 
 const Modal: React.FC<ChatBoxProps> = ({ chatBoxSettings, setChatBoxSettings }) => {
+  const t = useTranslations();
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState('report_settings');
   const [mounted, setMounted] = useState(false);
@@ -116,7 +118,7 @@ const Modal: React.FC<ChatBoxProps> = ({ chatBoxSettings, setChatBoxSettings }) 
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-semibold text-white">
                     <span className="mr-2">⚙️</span>
-                    <span className="text-teal-400">Preferences</span>
+                    <span className="text-teal-400">{t("settings.preferencesTitle")}</span>
                   </h3>
                   <button
                     className="p-1 ml-auto text-gray-400 hover:text-white transition-colors duration-200"
@@ -132,7 +134,7 @@ const Modal: React.FC<ChatBoxProps> = ({ chatBoxSettings, setChatBoxSettings }) 
               {/* Body with content */}
               <div className="relative p-6 flex-auto bg-gray-900/95 modal-content">
                 {false && (<div className="tabs mb-4">
-                  <button onClick={() => setActiveTab('report_settings')} className={`tab-button ${activeTab === 'report_settings' ? 'active' : ''}`}>Report Settings</button>
+                  <button onClick={() => setActiveTab('report_settings')} className={`tab-button ${activeTab === 'report_settings' ? 'active' : ''}`}>{t("settings.reportSettingsTab")}</button>
                 </div>)}
 
                 {activeTab === 'report_settings' && (
@@ -150,13 +152,13 @@ const Modal: React.FC<ChatBoxProps> = ({ chatBoxSettings, setChatBoxSettings }) 
                   className="mr-3 px-4 py-2 text-sm font-medium text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 rounded-md transition-colors duration-200"
                   onClick={() => setShowModal(false)}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   className="px-6 py-2.5 text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-gradient-to-br hover:from-teal-500/95 hover:via-cyan-500/90 hover:to-teal-600/95 shadow-sm hover:shadow-teal-400/20 transition-all duration-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:ring-offset-1 focus:ring-offset-gray-900"
                   onClick={handleSaveChanges}
                 >
-                  Save Changes
+                  {t("common.saveChanges")}
                 </button>
               </div>
             </div>
@@ -185,7 +187,7 @@ const Modal: React.FC<ChatBoxProps> = ({ chatBoxSettings, setChatBoxSettings }) 
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          Preferences
+          {t("settings.preferencesTitle")}
         </span>
       </button>
       {mounted && showModal && createPortal(modalContent, document.body)}

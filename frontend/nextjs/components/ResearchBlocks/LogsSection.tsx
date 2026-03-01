@@ -1,6 +1,7 @@
 import Image from "next/image";
 import LogMessage from './elements/LogMessage';
 import { useEffect, useRef } from 'react';
+import { useTranslations } from "next-intl";
 
 interface Log {
   header: string;
@@ -14,6 +15,7 @@ interface OrderedLogsProps {
 }
 
 const LogsSection = ({ logs }: OrderedLogsProps) => {
+  const t = useTranslations();
   const logsContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,7 +30,7 @@ const LogsSection = ({ logs }: OrderedLogsProps) => {
       <div className="flex items-start gap-4 pb-3 lg:pb-3.5">
         <img src="/img/chat-check.svg" alt="logs" width={24} height={24} />
         <h3 className="text-base font-bold uppercase leading-[152.5%] text-white">
-          Agent Work
+          {t("report.agentWork")}
         </h3>
       </div>
       <div 

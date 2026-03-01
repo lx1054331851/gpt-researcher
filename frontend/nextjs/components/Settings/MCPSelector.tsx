@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from "next-intl";
 
 interface MCPConfig {
   name: string;
@@ -18,6 +19,7 @@ const MCPSelector: React.FC<MCPSelectorProps> = ({
   mcpConfigs,
   onMCPChange,
 }) => {
+  const t = useTranslations();
   const [enabled, setEnabled] = useState(mcpEnabled);
   const [configText, setConfigText] = useState(() => {
     // Initialize with the passed configs, handling empty array case
@@ -30,12 +32,8 @@ const MCPSelector: React.FC<MCPSelectorProps> = ({
     isValid: boolean;
     message: string;
     serverCount?: number;
-  }>({ isValid: true, message: 'Valid JSON ✓' });
+  }>({ isValid: true, message: t("settings.mcp.validJson") });
   const [showInfoModal, setShowInfoModal] = useState(false);
-
-  useEffect(() => {
-    validateConfig(configText);
-  }, [configText]);
 
   // Sync with props when they change (for localStorage loading)
   useEffect(() => {
@@ -49,9 +47,9 @@ const MCPSelector: React.FC<MCPSelectorProps> = ({
     }
   }, [mcpConfigs]);
 
-  const validateConfig = (text: string) => {
+  const validateConfig = useCallback((text: string) => {
     if (!text.trim() || text.trim() === '[]') {
-      setValidationStatus({ isValid: true, message: 'Empty configuration' });
+      setValidationStatus({ isValid: true, message: t("settings.mcp.emptyConfiguration") });
       return true;
     }
 
@@ -59,16 +57,16 @@ const MCPSelector: React.FC<MCPSelectorProps> = ({
       const parsed = JSON.parse(text);
 
       if (!Array.isArray(parsed)) {
-        throw new Error('Configuration must be an array');
+        throw new Error(t("settings.mcp.errors.mustBeArray"));
       }
 
       const errors: string[] = [];
       parsed.forEach((server: any, index: number) => {
         if (!server.name) {
-          errors.push(`Server ${index + 1}: missing name`);
+          errors.push(t("settings.mcp.errors.missingName", { index: index + 1 }));
         }
         if (!server.command && !server.connection_url) {
-          errors.push(`Server ${index + 1}: missing command or connection_url`);
+          errors.push(t("settings.mcp.errors.missingCommandOrConnectionUrl", { index: index + 1 }));
         }
       });
 
@@ -78,18 +76,22 @@ const MCPSelector: React.FC<MCPSelectorProps> = ({
 
       setValidationStatus({
         isValid: true,
-        message: `Valid JSON ✓ (${parsed.length} server${parsed.length !== 1 ? 's' : ''})`,
+        message: t("settings.mcp.validJsonWithCount", { count: parsed.length }),
         serverCount: parsed.length
       });
       return true;
     } catch (error: any) {
       setValidationStatus({
         isValid: false,
-        message: `Invalid JSON: ${error.message}`
+        message: `${t("settings.mcp.invalidJson")}: ${error.message}`
       });
       return false;
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    validateConfig(configText);
+  }, [configText, validateConfig]);
 
   const handleEnabledChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newEnabled = e.target.checked;
@@ -261,59 +263,59 @@ const MCPSelector: React.FC<MCPSelectorProps> = ({
               checked={enabled}
               onChange={handleEnabledChange}
             />
-            Enable MCP (Model Context Protocol)
+            {t("settings.mcp.enable")}
           </label>
           <button
             type="button"
             className="settings mcp-info-btn"
             onClick={() => setShowInfoModal(true)}
-            title="Learn about MCP"
+            title={t("settings.mcp.learnMore")}
           >
             ℹ️
           </button>
         </div>
         <small className="text-muted" style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.85rem', marginBottom: '15px', display: 'block' }}>
-          Connect to external tools and data sources through MCP servers
+          {t("settings.mcp.subtitle")}
         </small>
 
         {enabled && (
           <div className="settings mcp-config-section">
             <div className="settings mcp-presets">
-              <label className="agent_question" style={{ marginBottom: '10px' }}>Quick Presets</label>
+              <label className="agent_question" style={{ marginBottom: '10px' }}>{t("settings.mcp.quickPresets")}</label>
               <div className="settings preset-buttons">
                 <button
                   type="button"
                   className={`settings preset-btn ${isPresetSelected('github') ? 'selected' : ''}`}
                   onClick={() => togglePreset('github')}
                 >
-                  <i className="fab fa-github"></i> GitHub
+                  <i className="fab fa-github"></i> {t("settings.mcp.presetGithub")}
                 </button>
                 <button
                   type="button"
                   className={`settings preset-btn ${isPresetSelected('tavily') ? 'selected' : ''}`}
                   onClick={() => togglePreset('tavily')}
                 >
-                  <i className="fas fa-search"></i> Tavily Web Search
+                  <i className="fas fa-search"></i> {t("settings.mcp.presetTavily")}
                 </button>
                 <button
                   type="button"
                   className={`settings preset-btn ${isPresetSelected('filesystem') ? 'selected' : ''}`}
                   onClick={() => togglePreset('filesystem')}
                 >
-                  <i className="fas fa-folder"></i> Local Files
+                  <i className="fas fa-folder"></i> {t("settings.mcp.presetFilesystem")}
                 </button>
               </div>
               <small className="text-muted" style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.85rem', marginTop: '8px', display: 'block' }}>
-                Click a preset to toggle MCP servers in the configuration below. Selected presets are highlighted.
+                {t("settings.mcp.presetsHelp")}
               </small>
             </div>
 
             <div className="settings mcp-config-group">
-              <label className="agent_question" style={{ marginBottom: '10px' }}>MCP Servers Configuration</label>
+              <label className="agent_question" style={{ marginBottom: '10px' }}>{t("settings.mcp.configurationTitle")}</label>
               <textarea
                 className={`settings mcp-config-textarea ${validationStatus.isValid ? 'valid' : 'invalid'}`}
                 rows={12}
-                placeholder="Paste your MCP servers configuration as JSON array..."
+                placeholder={t("settings.mcp.configurationPlaceholder")}
                 value={configText}
                 onChange={handleConfigChange}
                 style={{ minHeight: '300px' }}
@@ -327,22 +329,24 @@ const MCPSelector: React.FC<MCPSelectorProps> = ({
                   className="settings mcp-format-btn"
                   onClick={formatJSON}
                 >
-                  <i className="fas fa-code"></i> Format JSON
+                  <i className="fas fa-code"></i> {t("settings.mcp.formatJson")}
                 </button>
               </div>
               <small className="text-muted" style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.85rem', marginTop: '8px', display: 'block', lineHeight: '1.4' }}>
-                Paste your MCP servers configuration as a JSON array. Each server should have properties like{' '}
+                {t("settings.mcp.configurationHelp")}{' '}
                 <code style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '2px 4px', borderRadius: '3px', color: '#0d9488' }}>name</code>,{' '}
                 <code style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '2px 4px', borderRadius: '3px', color: '#0d9488' }}>command</code>,{' '}
-                <code style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '2px 4px', borderRadius: '3px', color: '#0d9488' }}>args</code>, and optional{' '}
-                <code style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '2px 4px', borderRadius: '3px', color: '#0d9488' }}>env</code> variables.{' '}
+                <code style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '2px 4px', borderRadius: '3px', color: '#0d9488' }}>args</code>,{' '}
+                {t("settings.mcp.configurationHelpSuffix")}{' '}
+                <code style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '2px 4px', borderRadius: '3px', color: '#0d9488' }}>env</code>{' '}
+                {t("settings.mcp.configurationHelpVariables")}{' '}
                 <a
                   href="#"
                   className="settings mcp-example-link"
                   onClick={(e) => { e.preventDefault(); showExample(); }}
                   style={{ color: '#0d9488', textDecoration: 'none', fontWeight: '500' }}
                 >
-                  See example →
+                  {t("settings.mcp.seeExample")}
                 </a>
               </small>
             </div>
@@ -359,32 +363,32 @@ const MCPSelector: React.FC<MCPSelectorProps> = ({
               >
                 <i className="fas fa-times"></i>
               </button>
-              <h3>Model Context Protocol (MCP)</h3>
-              <p>MCP enables GPT Researcher to connect with external tools and data sources through a standardized protocol.</p>
+              <h3>{t("settings.mcp.modal.title")}</h3>
+              <p>{t("settings.mcp.modal.intro")}</p>
 
-              <h4 className="highlight">Benefits:</h4>
+              <h4 className="highlight">{t("settings.mcp.modal.benefitsTitle")}</h4>
               <ul>
-                <li><span className="highlight">Access Local Data:</span> Connect to databases, file systems, and APIs</li>
-                <li><span className="highlight">Use External Tools:</span> Integrate with web services and third-party tools</li>
-                <li><span className="highlight">Extend Capabilities:</span> Add custom functionality through MCP servers</li>
-                <li><span className="highlight">Maintain Security:</span> Controlled access with proper authentication</li>
+                <li><span className="highlight">{t("settings.mcp.modal.benefits.localDataLabel")}</span> {t("settings.mcp.modal.benefits.localDataDesc")}</li>
+                <li><span className="highlight">{t("settings.mcp.modal.benefits.externalToolsLabel")}</span> {t("settings.mcp.modal.benefits.externalToolsDesc")}</li>
+                <li><span className="highlight">{t("settings.mcp.modal.benefits.extendLabel")}</span> {t("settings.mcp.modal.benefits.extendDesc")}</li>
+                <li><span className="highlight">{t("settings.mcp.modal.benefits.securityLabel")}</span> {t("settings.mcp.modal.benefits.securityDesc")}</li>
               </ul>
 
-              <h4 className="highlight">Quick Start:</h4>
+              <h4 className="highlight">{t("settings.mcp.modal.quickStartTitle")}</h4>
               <ul>
-                <li>Enable MCP using the checkbox above</li>
-                <li>Click a preset to add pre-configured servers to the JSON</li>
-                <li>Or paste your own MCP configuration as a JSON array</li>
-                <li>Start your research - MCP will run with optimal settings</li>
+                <li>{t("settings.mcp.modal.quickStart.enable")}</li>
+                <li>{t("settings.mcp.modal.quickStart.presets")}</li>
+                <li>{t("settings.mcp.modal.quickStart.custom")}</li>
+                <li>{t("settings.mcp.modal.quickStart.start")}</li>
               </ul>
 
-              <h4 className="highlight">Configuration Format:</h4>
-              <p>Each MCP server should be a JSON object with these properties:</p>
+              <h4 className="highlight">{t("settings.mcp.modal.configurationFormatTitle")}</h4>
+              <p>{t("settings.mcp.modal.configurationFormatIntro")}</p>
               <ul>
-                <li><span className="highlight">name:</span> Unique identifier (e.g., &quot;github&quot;, &quot;filesystem&quot;)</li>
-                <li><span className="highlight">command:</span> Command to run the server (e.g., &quot;npx&quot;, &quot;python&quot;)</li>
-                <li><span className="highlight">args:</span> Array of arguments (e.g., [&quot;-y&quot;, &quot;@modelcontextprotocol/server-github&quot;])</li>
-                <li><span className="highlight">env:</span> Object with environment variables (e.g., {JSON.stringify({API_KEY: "your_key"})})</li>
+                <li><span className="highlight">name:</span> {t("settings.mcp.modal.configurationFormat.name")}</li>
+                <li><span className="highlight">command:</span> {t("settings.mcp.modal.configurationFormat.command")}</li>
+                <li><span className="highlight">args:</span> {t("settings.mcp.modal.configurationFormat.args")}</li>
+                <li><span className="highlight">env:</span> {t("settings.mcp.modal.configurationFormat.env", { example: JSON.stringify({ API_KEY: "your_key" }) })}</li>
               </ul>
             </div>
           </div>

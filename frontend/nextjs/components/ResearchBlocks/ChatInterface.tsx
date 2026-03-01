@@ -3,6 +3,7 @@ import { ChatMessage } from '../../types/data';
 import ChatInput from './elements/ChatInput';
 import { markdownToHtml } from '../../helpers/markdownHelper';
 import '../../styles/markdown.css';
+import { useTranslations } from "next-intl";
 
 interface ChatInterfaceProps {
   researchId: string;
@@ -17,6 +18,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onAddMessage, 
   messages 
 }) => {
+  const t = useTranslations();
   const [isLoading, setIsLoading] = useState(false);
   const [promptValue, setPromptValue] = useState('');
   const [renderedMessages, setRenderedMessages] = useState<{content: string, html: string, role: string}[]>([]);
@@ -88,7 +90,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // Show error message in chat
       onAddMessage({
         role: 'assistant',
-        content: 'Sorry, there was an error processing your request. Please try again.',
+        content: t("errors.processingRequest"),
         timestamp: Date.now()
       });
     } finally {
@@ -114,10 +116,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
             </div>
             
-            <h3 className="text-lg font-medium text-white mb-2">Ask a question about this research report</h3>
+            <h3 className="text-lg font-medium text-white mb-2">{t("chat.askAboutReportTitle")}</h3>
             <p className="text-sm text-gray-400 max-w-md mx-auto">
-              The AI has analyzed all the content and is ready to help you explore the findings. 
-              Ask anything about the research, request summaries, or dig deeper into specific topics.
+              {t("chat.askAboutReportDescription")}
             </p>
           </div>
         ) : (

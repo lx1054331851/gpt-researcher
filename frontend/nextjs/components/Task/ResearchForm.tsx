@@ -6,6 +6,8 @@ import LayoutSelector from "../Settings/LayoutSelector";
 import DomainFilter from "./DomainFilter";
 import { useAnalytics } from "../../hooks/useAnalytics";
 import { ChatBoxSettings, Domain, MCPConfig } from '@/types/data';
+import { useTranslations } from "next-intl";
+import { useAppLocale } from "@/hooks/useAppLocale";
 
 interface ResearchFormProps {
   chatBoxSettings: ChatBoxSettings;
@@ -23,12 +25,14 @@ export default function ResearchForm({
   setChatBoxSettings,
   onFormSubmit,
 }: ResearchFormProps) {
+  const t = useTranslations();
+  const { locale, setLocale } = useAppLocale();
   const { trackResearchQuery } = useAnalytics();
   const [task, setTask] = useState("");
   const [newDomain, setNewDomain] = useState('');
 
   // Destructure necessary fields from chatBoxSettings
-  let { report_type, report_source, tone, layoutType } = chatBoxSettings;
+  let { report_type, report_source, tone, report_language, layoutType } = chatBoxSettings;
 
   const [domains, setDomains] = useState<Domain[]>(() => {
     if (typeof window !== 'undefined') {
@@ -82,6 +86,14 @@ export default function ResearchForm({
     }));
   };
 
+  const onReportLanguageChange = (e: { target: { value: any } }) => {
+    const { value } = e.target;
+    setChatBoxSettings((prevSettings: any) => ({
+      ...prevSettings,
+      report_language: value,
+    }));
+  };
+
   const onMCPChange = (enabled: boolean, configs: MCPConfig[]) => {
     setChatBoxSettings((prevSettings: any) => ({
       ...prevSettings,
@@ -110,7 +122,7 @@ export default function ResearchForm({
     >
       <div className="form-group">
         <label htmlFor="report_type" className="agent_question">
-          Report Type{" "}
+          {t("settings.reportTypeLabel")}
         </label>
         <select
           name="report_type"
@@ -120,19 +132,19 @@ export default function ResearchForm({
           required
         >
           <option value="research_report">
-            Summary - Short and fast (~2 min)
+            {t("settings.reportType.summary")}
           </option>
-          <option value="deep">Deep Research Report</option>
-          <option value="multi_agents">Multi Agents Report</option>
+          <option value="deep">{t("settings.reportType.deep")}</option>
+          <option value="multi_agents">{t("settings.reportType.multiAgents")}</option>
           <option value="detailed_report">
-            Detailed - In depth and longer (~5 min)
+            {t("settings.reportType.detailed")}
           </option>
         </select>
       </div>
 
       <div className="form-group">
         <label htmlFor="report_source" className="agent_question">
-          Report Source{" "}
+          {t("settings.reportSourceLabel")}
         </label>
         <select
           name="report_source"
@@ -141,13 +153,45 @@ export default function ResearchForm({
           className="form-control-static"
           required
         >
-          <option value="web">The Internet</option>
-          <option value="local">My Documents</option>
-          <option value="hybrid">Hybrid</option>
+          <option value="web">{t("settings.reportSource.web")}</option>
+          <option value="local">{t("settings.reportSource.local")}</option>
+          <option value="hybrid">{t("settings.reportSource.hybrid")}</option>
         </select>
       </div>
 
-      
+      <div className="form-group">
+        <label htmlFor="report_language" className="agent_question">
+          {t("settings.reportLanguageLabel")}
+        </label>
+        <select
+          name="report_language"
+          id="report_language"
+          value={report_language || "english"}
+          onChange={onReportLanguageChange}
+          className="form-control-static"
+          required
+        >
+          <option value="english">{t("settings.reportLanguage.english")}</option>
+          <option value="chinese">{t("settings.reportLanguage.chinese")}</option>
+        </select>
+      </div>
+
+      <div className="form-group">
+        <label htmlFor="ui_language" className="agent_question">
+          {t("settings.uiLanguageLabel")}
+        </label>
+        <select
+          name="ui_language"
+          id="ui_language"
+          value={locale}
+          onChange={(e) => setLocale(e.target.value)}
+          className="form-control-static"
+          required
+        >
+          <option value="en">{t("settings.uiLanguage.en")}</option>
+          <option value="zh-CN">{t("settings.uiLanguage.zh-CN")}</option>
+        </select>
+      </div>
 
       {report_source === "local" || report_source === "hybrid" ? (
         <FileUpload />

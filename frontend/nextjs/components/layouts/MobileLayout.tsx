@@ -4,6 +4,9 @@ import Image from "next/image";
 import { ChatBoxSettings } from "@/types/data";
 import { useResearchHistoryContext } from "@/hooks/ResearchHistoryContext";
 import { formatDistanceToNow } from "date-fns";
+import { enUS, zhCN } from "date-fns/locale";
+import { useTranslations } from "next-intl";
+import { useAppLocale } from "@/hooks/useAppLocale";
 
 interface MobileLayoutProps {
   children: React.ReactNode;
@@ -32,6 +35,8 @@ export default function MobileLayout({
   toastOptions = {},
   toggleSidebar
 }: MobileLayoutProps) {
+  const t = useTranslations();
+  const { locale, setLocale } = useAppLocale();
   const defaultRef = useRef<HTMLDivElement>(null);
   const contentRef = mainContentRef || defaultRef;
   const [showSettings, setShowSettings] = useState(false);
@@ -42,14 +47,17 @@ export default function MobileLayout({
   
   // Format timestamp for display
   const formatTimestamp = (timestamp: number | string | Date | undefined) => {
-    if (!timestamp) return 'Unknown time';
+    if (!timestamp) return t("common.unknownTime");
     
     try {
       const date = new Date(timestamp);
-      if (isNaN(date.getTime())) return 'Unknown time';
-      return formatDistanceToNow(date, { addSuffix: true });
+      if (isNaN(date.getTime())) return t("common.unknownTime");
+      return formatDistanceToNow(date, {
+        addSuffix: true,
+        locale: locale === "zh-CN" ? zhCN : enUS,
+      });
     } catch {
-      return 'Unknown time';
+      return t("common.unknownTime");
     }
   };
   
@@ -74,12 +82,12 @@ export default function MobileLayout({
             <a href="/" className="flex items-center">
               <img
                 src="/img/gptr-logo.png"
-                alt="GPT Researcher"
+                alt={t("metadata.appName")}
                 width={30}
                 height={30}
                 className="rounded-md mr-2"
               />
-              <span className="font-medium text-gray-200 text-sm">GPT Researcher</span>
+              <span className="font-medium text-gray-200 text-sm">{t("metadata.appName")}</span>
             </a>
           </div>
           
@@ -89,7 +97,7 @@ export default function MobileLayout({
               <button
                 onClick={onStop}
                 className="p-2 rounded-full bg-red-500/20 text-red-300 hover:bg-red-500/30"
-                aria-label="Stop research"
+                aria-label={t("common.stop")}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
@@ -101,7 +109,7 @@ export default function MobileLayout({
               <button
                 onClick={onNewResearch}
                 className="p-2 rounded-full bg-sky-500/20 text-sky-300 hover:bg-sky-500/30"
-                aria-label="New research"
+                aria-label={t("common.newResearch")}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -117,7 +125,7 @@ export default function MobileLayout({
                 if (toggleSidebar) toggleSidebar();
               }}
               className="p-2 rounded-full bg-gray-800/50 text-gray-300 hover:bg-gray-700/50"
-              aria-label="View history"
+              aria-label={t("mobile.viewHistory")}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -134,7 +142,7 @@ export default function MobileLayout({
                 setShowHistory(false);
               }}
               className="p-2 rounded-full bg-gray-800/50 text-gray-300 hover:bg-gray-700/50"
-              aria-label="Settings"
+              aria-label={t("common.settings")}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
@@ -148,7 +156,7 @@ export default function MobileLayout({
         {showHistory && (
           <div className="px-4 py-3 bg-gray-800/90 border-t border-gray-700/50 animate-slide-down shadow-lg max-h-[70vh] overflow-y-auto custom-scrollbar">
             <div className="mb-3 flex justify-between items-center">
-              <h3 className="text-sm font-medium text-gray-200">Research History</h3>
+              <h3 className="text-sm font-medium text-gray-200">{t("sidebar.researchHistory")}</h3>
               <button 
                 onClick={() => setShowHistory(false)}
                 className="text-gray-400 hover:text-gray-300"
@@ -186,12 +194,12 @@ export default function MobileLayout({
                     <polyline points="12 6 12 12 16 14"></polyline>
                   </svg>
                 </div>
-                <p className="text-sm text-gray-400">No research history yet</p>
+                <p className="text-sm text-gray-400">{t("sidebar.noHistoryTitle")}</p>
                 <button 
                   onClick={onNewResearch} 
                   className="mt-3 px-4 py-2 text-xs text-teal-300 bg-teal-900/30 hover:bg-teal-800/40 rounded-md transition-colors"
                 >
-                  Start New Research
+                  {t("common.startNewResearch")}
                 </button>
               </div>
             )}
@@ -202,7 +210,7 @@ export default function MobileLayout({
                   href="/history" 
                   className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
                 >
-                  View All Research History
+                  {t("mobile.viewAllHistory")}
                 </a>
               </div>
             )}
@@ -213,7 +221,7 @@ export default function MobileLayout({
         {showSettings && (
           <div className="px-4 py-3 bg-gray-800/90 border-t border-gray-700/50 animate-slide-down shadow-lg">
             <div className="mb-2 flex justify-between items-center">
-              <h3 className="text-sm font-medium text-gray-200">Settings</h3>
+              <h3 className="text-sm font-medium text-gray-200">{t("common.settings")}</h3>
               <button 
                 onClick={() => setShowSettings(false)}
                 className="text-gray-400 hover:text-gray-300"
@@ -227,57 +235,82 @@ export default function MobileLayout({
             
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Report Type</label>
+                <label className="block text-xs text-gray-400 mb-1">{t("settings.reportTypeLabel")}</label>
                 <select 
                   className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
                   value={chatBoxSettings.report_type}
                   onChange={(e) => setChatBoxSettings({...chatBoxSettings, report_type: e.target.value})}
                 >
-                  <option value="research_report">Summary - Short and fast (~2 min)</option>
-                  <option value="deep">Deep Research Report</option>
-                  <option value="multi_agents">Multi Agents Report</option>
-                  <option value="detailed_report">Detailed - In depth and longer (~5 min)</option>
+                  <option value="research_report">{t("settings.reportType.summary")}</option>
+                  <option value="deep">{t("settings.reportType.deep")}</option>
+                  <option value="multi_agents">{t("settings.reportType.multiAgents")}</option>
+                  <option value="detailed_report">{t("settings.reportType.detailed")}</option>
                 </select>
               </div>
               
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Research Source</label>
+                <label className="block text-xs text-gray-400 mb-1">{t("settings.reportSourceLabel")}</label>
                 <select 
                   className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
                   value={chatBoxSettings.report_source}
                   onChange={(e) => setChatBoxSettings({...chatBoxSettings, report_source: e.target.value})}
                 >
-                  <option value="web">Web</option>
-                  <option value="scholar">Scholar</option>
+                  <option value="web">{t("settings.reportSource.web")}</option>
+                  <option value="local">{t("settings.reportSource.local")}</option>
+                  <option value="hybrid">{t("settings.reportSource.hybrid")}</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">{t("settings.reportLanguageLabel")}</label>
+                <select 
+                  className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                  value={chatBoxSettings.report_language || "english"}
+                  onChange={(e) => setChatBoxSettings({...chatBoxSettings, report_language: e.target.value})}
+                >
+                  <option value="english">{t("settings.reportLanguage.english")}</option>
+                  <option value="chinese">{t("settings.reportLanguage.chinese")}</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">{t("settings.uiLanguageLabel")}</label>
+                <select
+                  className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                  value={locale}
+                  onChange={(e) => setLocale(e.target.value)}
+                >
+                  <option value="en">{t("settings.uiLanguage.en")}</option>
+                  <option value="zh-CN">{t("settings.uiLanguage.zh-CN")}</option>
                 </select>
               </div>
               
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Research Tone</label>
+                <label className="block text-xs text-gray-400 mb-1">{t("settings.toneLabel")}</label>
                 <select 
                   className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
                   value={chatBoxSettings.tone}
                   onChange={(e) => setChatBoxSettings({...chatBoxSettings, tone: e.target.value})}
                 >
-                  <option value="Objective">Objective - Impartial and unbiased presentation of facts</option>
-                  <option value="Formal">Formal - Adheres to academic standards</option>
-                  <option value="Analytical">Analytical - Critical evaluation of data</option>
-                  <option value="Persuasive">Persuasive - Convincing viewpoint</option>
-                  <option value="Informative">Informative - Clear, comprehensive information</option>
-                  <option value="Simple">Simple - Basic vocabulary and clear explanations</option>
-                  <option value="Casual">Casual - Conversational style</option>
+                  <option value="Objective">{t("settings.toneOptions.Objective")}</option>
+                  <option value="Formal">{t("settings.toneOptions.Formal")}</option>
+                  <option value="Analytical">{t("settings.toneOptions.Analytical")}</option>
+                  <option value="Persuasive">{t("settings.toneOptions.Persuasive")}</option>
+                  <option value="Informative">{t("settings.toneOptions.Informative")}</option>
+                  <option value="Simple">{t("settings.toneOptions.Simple")}</option>
+                  <option value="Casual">{t("settings.toneOptions.Casual")}</option>
                 </select>
               </div>
               
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Layout</label>
+                <label className="block text-xs text-gray-400 mb-1">{t("settings.layoutLabel")}</label>
                 <select 
                   className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
                   value={chatBoxSettings.layoutType}
                   onChange={(e) => setChatBoxSettings({...chatBoxSettings, layoutType: e.target.value})}
                 >
-                  <option value="copilot">Copilot - Chat style layout</option>
-                  <option value="document">Document - Traditional report layout</option>
+                  <option value="copilot">{t("settings.layoutOptions.copilotMobile")}</option>
+                  <option value="document">{t("settings.layoutOptions.documentMobile")}</option>
                 </select>
               </div>
             </div>
@@ -340,7 +373,7 @@ export default function MobileLayout({
           </a>
         </div>
         <div className="text-xs text-gray-400">
-          © {new Date().getFullYear()} GPT Researcher. All rights reserved.
+          {t("common.copyright", { year: new Date().getFullYear() })}
         </div>
       </footer>
       

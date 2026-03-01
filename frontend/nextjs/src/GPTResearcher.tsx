@@ -41,6 +41,7 @@ export const GPTResearcher = ({
     report_source: 'web', 
     report_type: 'research_report', 
     tone: 'Objective',
+    report_language: 'english',
     domains: [],
     defaultReportType: 'research_report',
     layoutType: 'default',
