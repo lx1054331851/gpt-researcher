@@ -94,10 +94,29 @@ $ cd gpt-researcher
 
 <br />
 
-> **步骤2** -安装依赖项
+> **步骤2** - 安装依赖项
+
+**方式一：使用 pip（默认）**
 ```bash
 $ pip install -r requirements.txt
 ```
+
+**方式二：使用 uv（推荐，速度更快）**
+
+[uv](https://github.com/astral-sh/uv) 是一个高性能的 Python 包管理器，安装速度通常比 pip 快 10–100 倍。项目已原生支持 `uv`（`pyproject.toml` 中包含 `[tool.uv.sources]` 配置）。
+
+```bash
+# 安装 uv（若尚未安装）
+$ curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 创建虚拟环境并激活
+$ uv venv
+$ source .venv/bin/activate   # Windows 用户：.venv\Scripts\activate
+
+# 同步安装所有依赖
+$ uv sync
+```
+
 <br />
 
 > **第 3 步** - 使用 OpenAI 密钥和 Tavily API 密钥创建 .env 文件，或直接导出该文件

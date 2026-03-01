@@ -7,7 +7,7 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.11"
+python = ">=3.11,<3.14"
 aiofiles = ">=23.2.1"
 arxiv = ">=2.0.0"
 beautifulsoup4 = ">=4.12.2"
@@ -68,7 +68,7 @@ description = "GPT Researcher is an autonomous agent designed for comprehensive 
 authors = [{ name = "Assaf Elovic", email = "assaf.elovic@gmail.com" }]
 license = { text = "MIT" }
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "aiofiles>=23.2.1",
     # Core dependencies
@@ -224,7 +224,6 @@ requirements-txt = [
     "langchain-cohere",
     "langchain-dashscope",
     "langchain-fireworks",
-    "langchain-gigachat",
     "langchain-google-genai",
     "langchain-google-vertexai",
     "langchain-groq",
