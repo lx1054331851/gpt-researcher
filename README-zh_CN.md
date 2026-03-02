@@ -147,7 +147,17 @@ $ uvicorn main:app --reload
 ```
 <br />
 
-> **第 5 步** - 在任何浏览器上访问 http://localhost:8000，享受研究乐趣！
+> **第 5 步（可选）** - 启动 NextJS 前端（3000 端口）
+
+```bash
+$ cd frontend/nextjs
+$ npm install --legacy-peer-deps
+$ npm run dev
+```
+
+<br />
+
+> **第 6 步** - 后端接口地址为 http://localhost:8000；如已启动 NextJS 前端，请在浏览器访问 http://localhost:3000。
 
 要了解如何开始使用 Docker 或了解有关功能和服务的更多信息，请访问 [documentation](https://docs.gptr.dev) 页面。
 

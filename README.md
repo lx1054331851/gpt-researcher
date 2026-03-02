@@ -130,7 +130,16 @@ See the [Documentation](https://docs.gptr.dev/docs/gpt-researcher/getting-starte
     python -m uvicorn main:app --reload
     ```
 
-Visit [http://localhost:8000](http://localhost:8000) to start.
+  5. (Optional, NextJS frontend) Start the frontend on port 3000:
+
+    ```bash
+    cd frontend/nextjs
+    npm install --legacy-peer-deps
+    npm run dev
+    ```
+
+  Backend API runs at [http://localhost:8000](http://localhost:8000).
+  If you start NextJS, open [http://localhost:3000](http://localhost:3000) in your browser.
 
 For other setups (e.g., Poetry or virtual environments), check the [Getting Started page](https://docs.gptr.dev/docs/gpt-researcher/getting-started).
 
