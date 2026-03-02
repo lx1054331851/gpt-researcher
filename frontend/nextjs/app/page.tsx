@@ -26,6 +26,19 @@ import { getAppropriateLayout } from "@/utils/getLayout";
 import MobileHomeScreen from "@/components/mobile/MobileHomeScreen";
 import MobileResearchContent from "@/components/mobile/MobileResearchContent";
 
+const DEFAULT_CHAT_BOX_SETTINGS: ChatBoxSettings = {
+  report_type: "research_report",
+  report_source: "web",
+  tone: "Objective",
+  report_language: "english",
+  domains: [],
+  defaultReportType: "research_report",
+  layoutType: "copilot",
+  mcp_enabled: false,
+  mcp_configs: [],
+  mcp_strategy: "fast",
+};
+
 export default function Home() {
   const t = useTranslations();
   const router = useRouter();
@@ -35,38 +48,8 @@ export default function Home() {
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [isInChatMode, setIsInChatMode] = useState(false);
-  const [chatBoxSettings, setChatBoxSettings] = useState<ChatBoxSettings>(() => {
-    // Default settings
-    const defaultSettings = {
-      report_type: "research_report",
-      report_source: "web",
-      tone: "Objective",
-      report_language: "english",
-      domains: [],
-      defaultReportType: "research_report",
-      layoutType: 'copilot',
-      mcp_enabled: false,
-      mcp_configs: [],
-      mcp_strategy: "fast",
-    };
-
-    // Try to load all settings from localStorage
-    if (typeof window !== 'undefined') {
-      const savedSettings = localStorage.getItem('chatBoxSettings');
-      if (savedSettings) {
-        try {
-          const parsedSettings = JSON.parse(savedSettings);
-          return {
-            ...defaultSettings,
-            ...parsedSettings, // Override defaults with saved settings
-          };
-        } catch (e) {
-          console.error('Error parsing saved settings:', e);
-        }
-      }
-    }
-    return defaultSettings;
-  });
+  const [chatBoxSettings, setChatBoxSettings] = useState<ChatBoxSettings>(DEFAULT_CHAT_BOX_SETTINGS);
+  const [hasLoadedChatSettings, setHasLoadedChatSettings] = useState(false);
   const [question, setQuestion] = useState("");
   const [orderedData, setOrderedData] = useState<Data[]>([]);
   const [showHumanFeedback, setShowHumanFeedback] = useState(false);
@@ -845,10 +828,31 @@ export default function Home() {
     setAllLogs(newLogs);
   }, [orderedData]);
 
+  // Load chatBoxSettings from localStorage on mount to avoid SSR/client hydration mismatch
+  useEffect(() => {
+    try {
+      const savedSettings = localStorage.getItem('chatBoxSettings');
+      if (savedSettings) {
+        const parsedSettings = JSON.parse(savedSettings);
+        setChatBoxSettings((prev) => ({
+          ...prev,
+          ...parsedSettings,
+        }));
+      }
+    } catch (e) {
+      console.error('Error parsing saved settings:', e);
+    } finally {
+      setHasLoadedChatSettings(true);
+    }
+  }, []);
+
   // Save chatBoxSettings to localStorage when they change
   useEffect(() => {
+    if (!hasLoadedChatSettings) {
+      return;
+    }
     localStorage.setItem('chatBoxSettings', JSON.stringify(chatBoxSettings));
-  }, [chatBoxSettings]);
+  }, [chatBoxSettings, hasLoadedChatSettings]);
 
   // Set chat mode when a report is complete
   useEffect(() => {

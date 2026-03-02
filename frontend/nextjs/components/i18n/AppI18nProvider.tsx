@@ -11,7 +11,6 @@ import {
   normalizeLocale,
   type AppLocale,
 } from "@/i18n/constants";
-import { detectClientLocale } from "@/i18n/locale";
 
 import enMessages from "@/messages/en.json";
 import zhCNMessages from "@/messages/zh-CN.json";
@@ -62,14 +61,6 @@ export default function AppI18nProvider({
   }, []);
 
   useEffect(() => {
-    const preferredLocale = detectClientLocale();
-    if (preferredLocale !== initialLocale) {
-      setLocaleState(preferredLocale);
-      setMessages(ALL_MESSAGES[preferredLocale]);
-    }
-  }, [initialLocale]);
-
-  useEffect(() => {
     document.documentElement.lang = locale;
     persistLocale(locale);
   }, [locale]);
@@ -78,7 +69,7 @@ export default function AppI18nProvider({
 
   return (
     <AppLocaleContext.Provider value={contextValue}>
-      <NextIntlClientProvider locale={locale} messages={messages}>
+      <NextIntlClientProvider locale={locale} messages={messages} timeZone="UTC">
         {children}
       </NextIntlClientProvider>
     </AppLocaleContext.Provider>

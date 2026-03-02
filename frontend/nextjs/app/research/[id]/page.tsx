@@ -20,6 +20,19 @@ import { useTranslations } from "next-intl";
 // Import mobile components
 import MobileResearchContent from "@/components/mobile/MobileResearchContent";
 
+const DEFAULT_CHAT_BOX_SETTINGS: ChatBoxSettings = {
+  report_source: "web",
+  report_type: "research_report",
+  tone: "Objective",
+  report_language: "english",
+  domains: [],
+  defaultReportType: "research_report",
+  layoutType: "copilot",
+  mcp_enabled: false,
+  mcp_configs: [],
+  mcp_strategy: "fast",
+};
+
 export default function ResearchPage({ params }: { params: { id: string } }) {
   const t = useTranslations();
   const router = useRouter();
@@ -35,38 +48,8 @@ export default function ResearchPage({ params }: { params: { id: string } }) {
   const [isProcessingChat, setIsProcessingChat] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [chatBoxSettings, setChatBoxSettings] = useState<ChatBoxSettings>(() => {
-    // Default settings
-    const defaultSettings = {
-      report_source: "web",
-      report_type: "research_report",
-      tone: "Objective",
-      report_language: "english",
-      domains: [],
-      defaultReportType: "research_report",
-      layoutType: 'copilot',
-      mcp_enabled: false,
-      mcp_configs: [],
-      mcp_strategy: "fast",
-    };
-
-    // Try to load all settings from localStorage
-    if (typeof window !== 'undefined') {
-      const savedSettings = localStorage.getItem('chatBoxSettings');
-      if (savedSettings) {
-        try {
-          const parsedSettings = JSON.parse(savedSettings);
-          return {
-            ...defaultSettings,
-            ...parsedSettings, // Override defaults with saved settings
-          };
-        } catch (e) {
-          console.error('Error parsing saved settings:', e);
-        }
-      }
-    }
-    return defaultSettings;
-  });
+  const [chatBoxSettings, setChatBoxSettings] = useState<ChatBoxSettings>(DEFAULT_CHAT_BOX_SETTINGS);
+  const [hasLoadedChatSettings, setHasLoadedChatSettings] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -94,10 +77,31 @@ export default function ResearchPage({ params }: { params: { id: string } }) {
     setSidebarOpen(false);
   };
 
+  // Load chatBoxSettings from localStorage on mount to avoid SSR/client hydration mismatch
+  useEffect(() => {
+    try {
+      const savedSettings = localStorage.getItem('chatBoxSettings');
+      if (savedSettings) {
+        const parsedSettings = JSON.parse(savedSettings);
+        setChatBoxSettings((prev) => ({
+          ...prev,
+          ...parsedSettings,
+        }));
+      }
+    } catch (e) {
+      console.error('Error parsing saved settings:', e);
+    } finally {
+      setHasLoadedChatSettings(true);
+    }
+  }, []);
+
   // Save chatBoxSettings to localStorage when they change
   useEffect(() => {
+    if (!hasLoadedChatSettings) {
+      return;
+    }
     localStorage.setItem('chatBoxSettings', JSON.stringify(chatBoxSettings));
-  }, [chatBoxSettings]);
+  }, [chatBoxSettings, hasLoadedChatSettings]);
 
   // Load research data on mount
   useEffect(() => {
