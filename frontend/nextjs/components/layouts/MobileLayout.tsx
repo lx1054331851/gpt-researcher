@@ -7,6 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import { enUS, zhCN } from "date-fns/locale";
 import { useTranslations } from "next-intl";
 import { useAppLocale } from "@/hooks/useAppLocale";
+import LanguageToggle from "@/components/i18n/LanguageToggle";
 
 interface MobileLayoutProps {
   children: React.ReactNode;
@@ -93,6 +94,8 @@ export default function MobileLayout({
           
           {/* Actions */}
           <div className="flex items-center space-x-2">
+            <LanguageToggle className="h-8 min-w-[36px] px-2 text-[11px]" />
+
             {loading && (
               <button
                 onClick={onStop}

@@ -1,6 +1,7 @@
 import React from 'react';
 import Image from "next/image";
 import { useTranslations } from "next-intl";
+import LanguageToggle from "@/components/i18n/LanguageToggle";
 
 interface HeaderProps {
   loading?: boolean;      // Indicates if research is currently in progress
@@ -21,6 +22,10 @@ const Header = ({ loading, isStopped, showResult, onStop, onNewResearch, isCopil
       
       {/* Header container */}
       <div className="container relative h-[60px] px-4 lg:h-[80px] lg:px-0 pt-4 pb-4">
+        <div className="absolute right-4 top-3 lg:right-0 lg:top-4 z-20">
+          <LanguageToggle />
+        </div>
+
         <div className="flex flex-col items-center">
           {/* Logo/Home link */}
           <a href="/">

@@ -6,6 +6,7 @@ import Question from '@/components/ResearchBlocks/Question';
 import ChatResponse from '@/components/ResearchBlocks/ChatResponse';
 import Image from 'next/image';
 import { useTranslations } from "next-intl";
+import LanguageToggle from "@/components/i18n/LanguageToggle";
 
 interface CopilotPanelProps {
   question: string;
@@ -97,6 +98,8 @@ const CopilotPanel: React.FC<CopilotPanelProps> = ({
         
         {/* Right side */}
         <div className="flex items-center gap-3">
+          <LanguageToggle className="h-7 min-w-[34px] px-2 text-[11px]" />
+
           {/* Connection status indicator */}
           <div className="flex items-center">
             <div className={`w-1.5 h-1.5 rounded-full ${loading || isProcessingChat ? 'bg-amber-500 animate-pulse' : 'bg-teal-500'} mr-2`}></div>
