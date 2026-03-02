@@ -88,8 +88,13 @@ def get_retriever(retriever: str):
 
             return CustomRetriever
         case "mcp":
-            from gpt_researcher.retrievers import MCPRetriever
+            from gpt_researcher.retrievers.mcp import MCPRetriever
 
+            if MCPRetriever is None:
+                raise ImportError(
+                    "Retriever 'mcp' requires optional dependency 'langchain-mcp-adapters'. "
+                    "Install it to enable MCP retrieval."
+                )
             return MCPRetriever
 
         case _:

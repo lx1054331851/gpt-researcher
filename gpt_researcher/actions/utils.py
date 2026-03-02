@@ -26,13 +26,28 @@ async def stream_output(
                 'cp1252', errors='replace').decode('cp1252'))
 
     if websocket:
-        await websocket.send_json(
-            {"type": type, "content": content,
-                "output": output, "metadata": metadata}
+        await safe_send_json(
+            websocket,
+            {
+                "type": type,
+                "content": content,
+                "output": output,
+                "metadata": metadata,
+            },
         )
 
 
-async def safe_send_json(websocket: Any, data: Dict[str, Any]) -> None:
+def _is_ws_closed_error(error_msg: str) -> bool:
+    lowered = error_msg.lower()
+    return (
+        "cannot call \"send\" once a close message has been sent" in lowered
+        or "connection closed" in lowered
+        or "websocketdisconnect" in lowered
+        or "clientdisconnected" in lowered
+    )
+
+
+async def safe_send_json(websocket: Any, data: Dict[str, Any]) -> bool:
     """
     Safely send JSON data through a WebSocket connection.
 
@@ -41,22 +56,41 @@ async def safe_send_json(websocket: Any, data: Dict[str, Any]) -> None:
         data (Dict[str, Any]): The data to send as JSON.
 
     Returns:
-        None
+        bool: True if sent successfully, False otherwise.
     """
+    if websocket is None:
+        return False
+
+    if getattr(websocket, "_gptr_disconnected", False):
+        return False
+
     try:
         await websocket.send_json(data)
+        return True
     except Exception as e:
         error_type = type(e).__name__
         error_msg = str(e)
+        # Check for common WebSocket errors and provide helpful context
+        if _is_ws_closed_error(error_msg):
+            if not getattr(websocket, "_gptr_disconnected_logged", False):
+                logger.warning("WebSocket connection closed. Skipping further streaming output.")
+                try:
+                    setattr(websocket, "_gptr_disconnected_logged", True)
+                except Exception:
+                    pass
+            try:
+                setattr(websocket, "_gptr_disconnected", True)
+            except Exception:
+                pass
+            return False
+
         logger.error(
             f"Error sending JSON through WebSocket: {error_type}: {error_msg}",
             exc_info=True
         )
-        # Check for common WebSocket errors and provide helpful context
-        if "closed" in error_msg.lower() or "connection" in error_msg.lower():
-            logger.warning("WebSocket connection appears to be closed. Client may have disconnected.")
-        elif "timeout" in error_msg.lower():
+        if "timeout" in error_msg.lower():
             logger.warning("WebSocket send operation timed out. The client may be unresponsive.")
+        return False
 
 
 def calculate_cost(

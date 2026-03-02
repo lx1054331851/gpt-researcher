@@ -8,10 +8,13 @@ Run this to start the research API server.
 import uvicorn
 import os
 import sys
+from dotenv import load_dotenv
 
 # Add the backend directory to Python path
 backend_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, backend_dir)
+project_root_dir = os.path.dirname(backend_dir)
+load_dotenv(os.path.join(project_root_dir, ".env"))
 
 if __name__ == "__main__":
     # Change to backend directory
@@ -25,6 +28,5 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
-
 
 

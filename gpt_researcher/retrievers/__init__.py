@@ -11,7 +11,6 @@ from .serpapi.serpapi import SerpApiSearch
 from .serper.serper import SerperSearch
 from .tavily.tavily_search import TavilySearch
 from .exa.exa import ExaSearch
-from .mcp import MCPRetriever
 from .bocha.bocha import BoChaSearch
 
 __all__ = [
@@ -31,3 +30,16 @@ __all__ = [
     "MCPRetriever",
     "BoChaSearch"
 ]
+
+
+def __getattr__(name: str):
+    if name == "MCPRetriever":
+        from .mcp import MCPRetriever
+
+        if MCPRetriever is None:
+            raise ImportError(
+                "MCPRetriever requires optional dependency 'langchain-mcp-adapters'. "
+                "Install it to use RETRIEVER=mcp."
+            )
+        return MCPRetriever
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -6,6 +6,11 @@ import logging
 import sys
 import warnings
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Ensure .env is loaded regardless of startup entrypoint.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 # Suppress Pydantic V2 migration warnings
 warnings.filterwarnings("ignore", message="Valid config keys have changed in V2")

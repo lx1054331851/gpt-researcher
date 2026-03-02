@@ -2,6 +2,32 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { Data, ChatBoxSettings, QuestionData } from '../types/data';
 import { getHost } from '../helpers/getHost';
 
+const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//;
+
+const buildWebSocketUrl = (hostOrUrl: string): string => {
+  const trimmedHost = hostOrUrl.trim();
+  if (!trimmedHost) {
+    return 'ws://localhost:8000/ws';
+  }
+
+  const normalizedUrl = ABSOLUTE_URL_PATTERN.test(trimmedHost)
+    ? trimmedHost
+    : `http://${trimmedHost}`;
+
+  try {
+    const parsedUrl = new URL(normalizedUrl);
+    const protocol =
+      parsedUrl.protocol === 'https:' || parsedUrl.protocol === 'wss:' ? 'wss:' : 'ws:';
+    const cleanPath = parsedUrl.pathname.replace(/\/+$/, '');
+    const pathPrefix = cleanPath === '/' ? '' : cleanPath;
+
+    return `${protocol}//${parsedUrl.host}${pathPrefix}/ws`;
+  } catch (error) {
+    console.warn(`Invalid host for WebSocket: ${hostOrUrl}. Falling back to localhost:8000.`);
+    return 'ws://localhost:8000/ws';
+  }
+};
+
 export const useWebSocket = (
   setOrderedData: React.Dispatch<React.SetStateAction<Data[]>>,
   setAnswer: React.Dispatch<React.SetStateAction<string>>, 
@@ -52,15 +78,8 @@ export const useWebSocket = (
       socket.close(1000, "New connection requested");
     }
 
-    const storedConfig = localStorage.getItem('apiVariables');
-    const apiVariables = storedConfig ? JSON.parse(storedConfig) : {};
-
     if (typeof window !== 'undefined') {
-      
-      let fullHost = getHost()
-      const protocol = fullHost.includes('https') ? 'wss:' : 'ws:'
-      const cleanHost = fullHost.replace('http://', '').replace('https://', '')
-      const ws_uri = `${protocol}//${cleanHost}/ws`
+      const ws_uri = buildWebSocketUrl(getHost());
 
       console.log(`Creating new WebSocket connection to ${ws_uri}`);
       const newSocket = new WebSocket(ws_uri);

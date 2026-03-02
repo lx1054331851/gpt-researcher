@@ -68,6 +68,10 @@ class ReasoningEfforts(Enum):
     Medium = "medium"
     Low = "low"
 
+def _get_azure_api_version() -> str | None:
+    """Return Azure API version using either supported env var name."""
+    return os.environ.get("AZURE_OPENAI_API_VERSION") or os.environ.get("OPENAI_API_VERSION")
+
 
 class ChatLogger:
     """Helper utility to log all chat requests and their corresponding responses
@@ -116,6 +120,21 @@ class GenericLLMProvider:
             if "model" in kwargs:
                 model_name = kwargs.get("model", None)
                 kwargs = {"azure_deployment": model_name, **kwargs}
+
+            # Support both old/new kwarg names and env var names.
+            if "openai_api_key" in kwargs and "api_key" not in kwargs:
+                kwargs["api_key"] = kwargs.pop("openai_api_key")
+            if "openai_api_version" in kwargs and "api_version" not in kwargs:
+                kwargs["api_version"] = kwargs.pop("openai_api_version")
+
+            if "azure_endpoint" not in kwargs and os.environ.get("AZURE_OPENAI_ENDPOINT"):
+                kwargs["azure_endpoint"] = os.environ["AZURE_OPENAI_ENDPOINT"]
+            if "api_key" not in kwargs and os.environ.get("AZURE_OPENAI_API_KEY"):
+                kwargs["api_key"] = os.environ["AZURE_OPENAI_API_KEY"]
+            if "api_version" not in kwargs:
+                api_version = _get_azure_api_version()
+                if api_version:
+                    kwargs["api_version"] = api_version
 
             llm = AzureChatOpenAI(**kwargs)
         elif provider == "cohere":

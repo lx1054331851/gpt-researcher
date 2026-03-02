@@ -9,6 +9,16 @@ class BeautifulSoupScraper:
         self.link = link
         self.session = session
 
+    @staticmethod
+    def _is_xml_response(response) -> bool:
+        content_type = (response.headers.get("content-type") or "").lower()
+        if "xml" in content_type or "rss" in content_type or "atom" in content_type:
+            return True
+
+        # Fallback sniffing for feeds/sitemaps served with incorrect content-type.
+        prefix = (response.content or b"")[:512].lstrip().lower()
+        return prefix.startswith((b"<?xml", b"<rss", b"<feed", b"<urlset", b"<sitemapindex"))
+
     def scrape(self):
         """
         This function scrapes content from a webpage by making a GET request, parsing the HTML using
@@ -22,8 +32,9 @@ class BeautifulSoupScraper:
         """
         try:
             response = self.session.get(self.link, timeout=4)
+            parser = "xml" if self._is_xml_response(response) else "lxml"
             soup = BeautifulSoup(
-                response.content, "lxml", from_encoding=response.encoding
+                response.content, parser, from_encoding=response.encoding
             )
 
             soup = clean_soup(soup)

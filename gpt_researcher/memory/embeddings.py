@@ -51,6 +51,15 @@ _SUPPORTED_PROVIDERS = {
     "openrouter",
 }
 
+def _get_azure_openai_api_version() -> str:
+    """Return Azure OpenAI API version from env with backward-compatible keys."""
+    api_version = os.environ.get("AZURE_OPENAI_API_VERSION") or os.environ.get("OPENAI_API_VERSION")
+    if not api_version:
+        raise KeyError(
+            "Missing Azure API version. Set AZURE_OPENAI_API_VERSION or OPENAI_API_VERSION."
+        )
+    return api_version
+
 
 class Memory:
     """Manages embedding generation for document similarity and retrieval.
@@ -111,7 +120,7 @@ class Memory:
                     model=model,
                     azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
                     openai_api_key=os.environ["AZURE_OPENAI_API_KEY"],
-                    openai_api_version=os.environ["AZURE_OPENAI_API_VERSION"],
+                    openai_api_version=_get_azure_openai_api_version(),
                     **embedding_kwargs,
                 )
             case "cohere":

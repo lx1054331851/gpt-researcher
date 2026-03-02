@@ -12,7 +12,7 @@ from gpt_researcher import GPTResearcher
 from utils import write_md_to_pdf, write_md_to_word, write_text_to_md
 from pathlib import Path
 from datetime import datetime
-from fastapi import HTTPException
+from fastapi import HTTPException, WebSocketDisconnect
 import logging
 import hashlib
 
@@ -28,6 +28,69 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
+def _is_ws_closed_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        isinstance(exc, WebSocketDisconnect)
+        or "cannot call \"send\" once a close message has been sent" in message
+        or "connection closed" in message
+        or "clientdisconnected" in message
+        or "websocketdisconnect" in message
+    )
+
+
+async def _safe_websocket_send_json(websocket, data: Dict[str, Any], *, context: str = "") -> bool:
+    try:
+        await websocket.send_json(data)
+        return True
+    except Exception as e:
+        if _is_ws_closed_error(e):
+            if not getattr(websocket, "_gptr_disconnected_logged", False):
+                logger.info(
+                    "WebSocket disconnected while sending JSON%s: %s",
+                    f" ({context})" if context else "",
+                    e,
+                )
+                try:
+                    setattr(websocket, "_gptr_disconnected_logged", True)
+                except Exception:
+                    pass
+        else:
+            logger.error(
+                "WebSocket JSON send failed%s: %s\n%s",
+                f" ({context})" if context else "",
+                e,
+                traceback.format_exc(),
+            )
+        return False
+
+
+async def _safe_websocket_send_text(websocket, data: str, *, context: str = "") -> bool:
+    try:
+        await websocket.send_text(data)
+        return True
+    except Exception as e:
+        if _is_ws_closed_error(e):
+            if not getattr(websocket, "_gptr_disconnected_logged", False):
+                logger.info(
+                    "WebSocket disconnected while sending text%s: %s",
+                    f" ({context})" if context else "",
+                    e,
+                )
+                try:
+                    setattr(websocket, "_gptr_disconnected_logged", True)
+                except Exception:
+                    pass
+        else:
+            logger.error(
+                "WebSocket text send failed%s: %s\n%s",
+                f" ({context})" if context else "",
+                e,
+                traceback.format_exc(),
+            )
+        return False
+
 class CustomLogsHandler:
     """Custom handler to capture streaming logs from the research process"""
     def __init__(self, websocket, task: str):
@@ -36,6 +99,7 @@ class CustomLogsHandler:
         sanitized_filename = sanitize_filename(f"task_{int(time.time())}_{task}")
         self.log_file = os.path.join("outputs", f"{sanitized_filename}.json")
         self.timestamp = datetime.now().isoformat()
+        self._ws_available = True
         # Initialize log file with metadata
         os.makedirs("outputs", exist_ok=True)
         with open(self.log_file, 'w') as f:
@@ -54,8 +118,10 @@ class CustomLogsHandler:
     async def send_json(self, data: Dict[str, Any]) -> None:
         """Store log data and send to websocket"""
         # Send to websocket for real-time display
-        if self.websocket:
-            await self.websocket.send_json(data)
+        if self.websocket and self._ws_available:
+            sent = await _safe_websocket_send_json(self.websocket, data, context="CustomLogsHandler")
+            if not sent:
+                self._ws_available = False
             
         # Read current log file
         with open(self.log_file, 'r') as f:
@@ -198,20 +264,20 @@ async def handle_chat_command(websocket, data: str):
             messages = [{"role": "user", "content": message}]
         
         if not messages:
-            await websocket.send_json({
+            await _safe_websocket_send_json(websocket, {
                 "type": "chat",
                 "content": "No message provided.",
                 "role": "assistant"
-            })
+            }, context="chat/no-message")
             return
         
         # Check if ChatAgentWithMemory is available
         if ChatAgentWithMemory is None:
-            await websocket.send_json({
+            await _safe_websocket_send_json(websocket, {
                 "type": "chat",
                 "content": "Chat functionality is not available. Please check the server configuration.",
                 "role": "assistant"
-            })
+            }, context="chat/unavailable")
             return
         
         # Create chat agent with the report context
@@ -225,31 +291,31 @@ async def handle_chat_command(websocket, data: str):
         response_content, tool_calls_metadata = await chat_agent.chat(messages, websocket)
         
         # Send response back via WebSocket
-        await websocket.send_json({
+        await _safe_websocket_send_json(websocket, {
             "type": "chat",
             "content": response_content,
             "role": "assistant",
             "metadata": {
                 "tool_calls": tool_calls_metadata
             } if tool_calls_metadata else None
-        })
+        }, context="chat/response")
         
         logger.info(f"Chat response sent successfully")
         
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse chat data: {e}")
-        await websocket.send_json({
+        await _safe_websocket_send_json(websocket, {
             "type": "chat",
             "content": f"Error: Invalid message format - {str(e)}",
             "role": "assistant"
-        })
+        }, context="chat/json-decode-error")
     except Exception as e:
         logger.error(f"Error handling chat command: {e}\n{traceback.format_exc()}")
-        await websocket.send_json({
+        await _safe_websocket_send_json(websocket, {
             "type": "chat",
             "content": f"Error processing your message: {str(e)}",
             "role": "assistant"
-        })
+        }, context="chat/unhandled-error")
 
 async def generate_report_files(report: str, filename: str) -> Dict[str, str]:
     pdf_path = await write_md_to_pdf(report, filename)
@@ -259,7 +325,11 @@ async def generate_report_files(report: str, filename: str) -> Dict[str, str]:
 
 
 async def send_file_paths(websocket, file_paths: Dict[str, str]):
-    await websocket.send_json({"type": "path", "output": file_paths})
+    await _safe_websocket_send_json(
+        websocket,
+        {"type": "path", "output": file_paths},
+        context="send-file-paths",
+    )
 
 
 def get_config_dict(
@@ -334,12 +404,14 @@ async def handle_websocket_communication(websocket, manager):
                 raise
             except Exception as e:
                 logger.error(f"Error running task: {e}\n{traceback.format_exc()}")
-                await websocket.send_json(
+                await _safe_websocket_send_json(
+                    websocket,
                     {
                         "type": "logs",
                         "content": "error",
                         "output": f"Error: {e}",
-                    }
+                    },
+                    context="task-error",
                 )
 
         return asyncio.create_task(safe_run())
@@ -351,19 +423,25 @@ async def handle_websocket_communication(websocket, manager):
                 logger.info(f"Received WebSocket message: {data[:50]}..." if len(data) > 50 else data)
                 
                 if data == "ping":
-                    await websocket.send_text("pong")
+                    sent = await _safe_websocket_send_text(websocket, "pong", context="ping")
+                    if not sent:
+                        break
                 elif running_task and not running_task.done():
                     # discard any new request if a task is already running
                     logger.warning(
                         f"Received request while task is already running. Request data preview: {data[: min(20, len(data))]}..."
                     )
-                    await websocket.send_json(
+                    sent = await _safe_websocket_send_json(
+                        websocket,
                         {
                             "type": "logs",
                             "content": "warning",
                             "output": "Task already running. Please wait.",
-                        }
+                        },
+                        context="task-already-running",
                     )
+                    if not sent:
+                        break
                 # Normalize command detection by checking startswith after stripping whitespace
                 elif data.strip().startswith("start"):
                     logger.info(f"Processing start command")
@@ -380,18 +458,30 @@ async def handle_websocket_communication(websocket, manager):
                     error_msg = f"Error: Unknown command or not enough parameters provided. Received: '{data[:100]}...'" if len(data) > 100 else f"Error: Unknown command or not enough parameters provided. Received: '{data}'"
                     logger.error(error_msg)
                     print(error_msg)
-                    await websocket.send_json({
+                    sent = await _safe_websocket_send_json(websocket, {
                         "type": "error",
                         "content": "error",
                         "output": "Unknown command received by server"
-                    })
+                    }, context="unknown-command")
+                    if not sent:
+                        break
+            except WebSocketDisconnect as e:
+                logger.info(f"WebSocket disconnected during receive loop. code={e.code}, reason='{e.reason}'")
+                break
             except Exception as e:
-                logger.error(f"WebSocket error: {str(e)}\n{traceback.format_exc()}")
-                print(f"WebSocket error: {e}")
+                if _is_ws_closed_error(e):
+                    logger.info(f"WebSocket closed in communication loop: {e}")
+                else:
+                    logger.error(f"WebSocket error: {str(e)}\n{traceback.format_exc()}")
+                    print(f"WebSocket error: {e}")
                 break
     finally:
         if running_task and not running_task.done():
             running_task.cancel()
+            try:
+                await running_task
+            except asyncio.CancelledError:
+                pass
 
 def extract_command_data(json_data: Dict) -> tuple:
     return (
