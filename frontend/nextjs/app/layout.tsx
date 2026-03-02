@@ -36,16 +36,16 @@ const MESSAGES_BY_LOCALE = {
   "zh-CN": zhCNMessages,
 };
 
-function getInitialLocaleFromRequest(): AppLocale {
-  const cookieStore = cookies();
-  const headerStore = headers();
+async function getInitialLocaleFromRequest(): Promise<AppLocale> {
+  const cookieStore = await cookies();
+  const headerStore = await headers();
   const cookieLocale = cookieStore.get("gptr_locale")?.value;
   const acceptLanguage = headerStore.get("accept-language");
   return resolveInitialLocale({ cookieLocale, acceptLanguage });
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  const locale = getInitialLocaleFromRequest();
+  const locale = await getInitialLocaleFromRequest();
   const localeMetadata = LOCALIZED_METADATA[locale];
 
   return {
@@ -88,12 +88,12 @@ export const viewport: Viewport = {
   themeColor: "#111827",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const initialLocale = getInitialLocaleFromRequest();
+  const initialLocale = await getInitialLocaleFromRequest();
   const initialMessages = MESSAGES_BY_LOCALE[initialLocale];
 
   return (
