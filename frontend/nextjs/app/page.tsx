@@ -30,7 +30,7 @@ const DEFAULT_CHAT_BOX_SETTINGS: ChatBoxSettings = {
   report_type: "research_report",
   report_source: "web",
   tone: "Objective",
-  report_language: "english",
+  report_language: "chinese",
   domains: [],
   defaultReportType: "research_report",
   layoutType: "copilot",
@@ -868,6 +868,8 @@ export default function Home() {
         <MobileHomeScreen
           promptValue={promptValue}
           setPromptValue={setPromptValue}
+          chatBoxSettings={chatBoxSettings}
+          setChatBoxSettings={setChatBoxSettings}
           handleDisplayResult={handleMobileDisplayResult}
           isLoading={loading}
         />
@@ -935,6 +937,8 @@ export default function Home() {
               <Hero
                 promptValue={promptValue}
                 setPromptValue={setPromptValue}
+                chatBoxSettings={chatBoxSettings}
+                setChatBoxSettings={setChatBoxSettings}
                 handleDisplayResult={handleDisplayResult}
               />
             </>

@@ -8,6 +8,7 @@ import { enUS, zhCN } from "date-fns/locale";
 import { useTranslations } from "next-intl";
 import { useAppLocale } from "@/hooks/useAppLocale";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import LuxeDropdown from "@/components/ui/LuxeDropdown";
 
 interface MobileLayoutProps {
   children: React.ReactNode;
@@ -238,83 +239,31 @@ export default function MobileLayout({
             
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">{t("settings.reportTypeLabel")}</label>
-                <select 
-                  className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                  value={chatBoxSettings.report_type}
-                  onChange={(e) => setChatBoxSettings({...chatBoxSettings, report_type: e.target.value})}
-                >
-                  <option value="research_report">{t("settings.reportType.summary")}</option>
-                  <option value="deep">{t("settings.reportType.deep")}</option>
-                  <option value="multi_agents">{t("settings.reportType.multiAgents")}</option>
-                  <option value="detailed_report">{t("settings.reportType.detailed")}</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">{t("settings.reportSourceLabel")}</label>
-                <select 
-                  className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                  value={chatBoxSettings.report_source}
-                  onChange={(e) => setChatBoxSettings({...chatBoxSettings, report_source: e.target.value})}
-                >
-                  <option value="web">{t("settings.reportSource.web")}</option>
-                  <option value="local">{t("settings.reportSource.local")}</option>
-                  <option value="hybrid">{t("settings.reportSource.hybrid")}</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">{t("settings.reportLanguageLabel")}</label>
-                <select 
-                  className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                  value={chatBoxSettings.report_language || "english"}
-                  onChange={(e) => setChatBoxSettings({...chatBoxSettings, report_language: e.target.value})}
-                >
-                  <option value="english">{t("settings.reportLanguage.english")}</option>
-                  <option value="chinese">{t("settings.reportLanguage.chinese")}</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">{t("settings.uiLanguageLabel")}</label>
-                <select
-                  className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                <LuxeDropdown
+                  id="mobile_ui_language"
+                  label={t("settings.uiLanguageLabel")}
                   value={locale}
-                  onChange={(e) => setLocale(e.target.value)}
-                >
-                  <option value="en">{t("settings.uiLanguage.en")}</option>
-                  <option value="zh-CN">{t("settings.uiLanguage.zh-CN")}</option>
-                </select>
+                  onChange={setLocale}
+                  options={[
+                    { value: "en", label: t("settings.uiLanguage.en") },
+                    { value: "zh-CN", label: t("settings.uiLanguage.zh-CN") },
+                  ]}
+                  compact
+                />
               </div>
               
               <div>
-                <label className="block text-xs text-gray-400 mb-1">{t("settings.toneLabel")}</label>
-                <select 
-                  className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                  value={chatBoxSettings.tone}
-                  onChange={(e) => setChatBoxSettings({...chatBoxSettings, tone: e.target.value})}
-                >
-                  <option value="Objective">{t("settings.toneOptions.Objective")}</option>
-                  <option value="Formal">{t("settings.toneOptions.Formal")}</option>
-                  <option value="Analytical">{t("settings.toneOptions.Analytical")}</option>
-                  <option value="Persuasive">{t("settings.toneOptions.Persuasive")}</option>
-                  <option value="Informative">{t("settings.toneOptions.Informative")}</option>
-                  <option value="Simple">{t("settings.toneOptions.Simple")}</option>
-                  <option value="Casual">{t("settings.toneOptions.Casual")}</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">{t("settings.layoutLabel")}</label>
-                <select 
-                  className="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                <LuxeDropdown
+                  id="mobile_layout_type"
+                  label={t("settings.layoutLabel")}
                   value={chatBoxSettings.layoutType}
-                  onChange={(e) => setChatBoxSettings({...chatBoxSettings, layoutType: e.target.value})}
-                >
-                  <option value="copilot">{t("settings.layoutOptions.copilotMobile")}</option>
-                  <option value="document">{t("settings.layoutOptions.documentMobile")}</option>
-                </select>
+                  onChange={(value) => setChatBoxSettings({ ...chatBoxSettings, layoutType: value })}
+                  options={[
+                    { value: "copilot", label: t("settings.layoutOptions.copilotMobile") },
+                    { value: "document", label: t("settings.layoutOptions.documentMobile") },
+                  ]}
+                  compact
+                />
               </div>
             </div>
           </div>

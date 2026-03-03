@@ -2,6 +2,8 @@ import React from 'react';
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import Modal from "@/components/Settings/Modal";
+import { ChatBoxSettings } from "@/types/data";
 
 interface HeaderProps {
   loading?: boolean;      // Indicates if research is currently in progress
@@ -10,9 +12,20 @@ interface HeaderProps {
   onStop?: () => void;    // Handler for stopping ongoing research
   onNewResearch?: () => void;  // Handler for starting fresh research
   isCopilotMode?: boolean; // Indicates if we are in copilot mode
+  chatBoxSettings?: ChatBoxSettings;
+  setChatBoxSettings?: React.Dispatch<React.SetStateAction<ChatBoxSettings>>;
 }
 
-const Header = ({ loading, isStopped, showResult, onStop, onNewResearch, isCopilotMode }: HeaderProps) => {
+const Header = ({
+  loading,
+  isStopped,
+  showResult,
+  onStop,
+  onNewResearch,
+  isCopilotMode,
+  chatBoxSettings,
+  setChatBoxSettings,
+}: HeaderProps) => {
   const t = useTranslations();
 
   return (
@@ -22,7 +35,14 @@ const Header = ({ loading, isStopped, showResult, onStop, onNewResearch, isCopil
       
       {/* Header container */}
       <div className="container relative h-[60px] px-4 lg:h-[80px] lg:px-0 pt-4 pb-4">
-        <div className="absolute right-4 top-3 lg:right-0 lg:top-4 z-20">
+        <div className="absolute right-4 top-3 z-20 flex items-center gap-2 lg:right-0 lg:top-4">
+          {chatBoxSettings && setChatBoxSettings && (
+            <Modal
+              chatBoxSettings={chatBoxSettings}
+              setChatBoxSettings={setChatBoxSettings}
+              iconOnly
+            />
+          )}
           <LanguageToggle />
         </div>
 

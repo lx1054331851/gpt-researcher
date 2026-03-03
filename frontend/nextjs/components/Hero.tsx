@@ -1,18 +1,24 @@
 import Image from "next/image";
 import React, { FC, useEffect, useState, useRef } from "react";
 import InputArea from "./ResearchBlocks/elements/InputArea";
+import ReportRunSettings from "./Task/ReportRunSettings";
+import { ChatBoxSettings } from "@/types/data";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslations } from "next-intl";
 
 type THeroProps = {
   promptValue: string;
   setPromptValue: React.Dispatch<React.SetStateAction<string>>;
+  chatBoxSettings: ChatBoxSettings;
+  setChatBoxSettings: React.Dispatch<React.SetStateAction<ChatBoxSettings>>;
   handleDisplayResult: (query : string) => void;
 };
 
 const Hero: FC<THeroProps> = ({
   promptValue,
   setPromptValue,
+  chatBoxSettings,
+  setChatBoxSettings,
   handleDisplayResult,
 }) => {
   const t = useTranslations();
@@ -155,6 +161,11 @@ const Hero: FC<THeroProps> = ({
               />
             </div>
           </div>
+
+          <ReportRunSettings
+            chatBoxSettings={chatBoxSettings}
+            setChatBoxSettings={setChatBoxSettings}
+          />
           
           {/* Disclaimer text */}
           <motion.div

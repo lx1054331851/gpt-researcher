@@ -1,9 +1,10 @@
-import React, { ChangeEvent } from 'react';
+import React from 'react';
 import { useTranslations } from "next-intl";
+import LuxeDropdown from "@/components/ui/LuxeDropdown";
 
 interface LayoutSelectorProps {
   layoutType: string;
-  onLayoutChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  onLayoutChange: (value: string) => void;
 }
 
 export default function LayoutSelector({ layoutType, onLayoutChange }: LayoutSelectorProps) {
@@ -11,18 +12,16 @@ export default function LayoutSelector({ layoutType, onLayoutChange }: LayoutSel
 
   return (
     <div className="form-group">
-      <label htmlFor="layoutType" className="agent_question">{t("settings.layoutLabel")}</label>
-      <select 
-        name="layoutType" 
-        id="layoutType" 
-        value={layoutType} 
-        onChange={onLayoutChange} 
-        className="form-control-static"
-        required
-      >
-        <option value="research">{t("settings.layoutOptions.research")}</option>
-        <option value="copilot">{t("settings.layoutOptions.copilot")}</option>
-      </select>
+      <LuxeDropdown
+        id="layoutType"
+        label={t("settings.layoutLabel")}
+        value={layoutType}
+        onChange={onLayoutChange}
+        options={[
+          { value: "research", label: t("settings.layoutOptions.research") },
+          { value: "copilot", label: t("settings.layoutOptions.copilot") },
+        ]}
+      />
     </div>
   );
 } 

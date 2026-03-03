@@ -109,7 +109,7 @@ export const useWebSocket = (
             report_type, 
             report_source, 
             tone,
-            language: report_language || "english",
+            language: report_language || "chinese",
             query_domains: domains,
             mcp_enabled: mcp_enabled || false,
             mcp_strategy: mcp_strategy || "fast",

@@ -41,7 +41,7 @@ export const GPTResearcher = ({
     report_source: 'web', 
     report_type: 'research_report', 
     tone: 'Objective',
-    report_language: 'english',
+    report_language: 'chinese',
     domains: [],
     defaultReportType: 'research_report',
     layoutType: 'default',
@@ -296,12 +296,16 @@ export const GPTResearcher = ({
         showResult={showResult}
         onStop={handleStopResearch}
         onNewResearch={handleStartNewResearch}
+        chatBoxSettings={chatBoxSettings}
+        setChatBoxSettings={setChatBoxSettings}
       />
       <main ref={mainContentRef} className="min-h-[100vh] pt-[70px]">
         {!showResult && (
           <Hero
             promptValue={promptValue}
             setPromptValue={setPromptValue}
+            chatBoxSettings={chatBoxSettings}
+            setChatBoxSettings={setChatBoxSettings}
             handleDisplayResult={handleDisplayResult}
           />
         )}

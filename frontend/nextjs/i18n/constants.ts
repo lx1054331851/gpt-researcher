@@ -11,7 +11,7 @@ export const REPORT_LANGUAGES = ["english", "chinese"] as const;
 
 export type ReportLanguage = (typeof REPORT_LANGUAGES)[number];
 
-export const DEFAULT_REPORT_LANGUAGE: ReportLanguage = "english";
+export const DEFAULT_REPORT_LANGUAGE: ReportLanguage = "chinese";
 
 export function normalizeLocale(locale: string | null | undefined): AppLocale {
   if (!locale) {

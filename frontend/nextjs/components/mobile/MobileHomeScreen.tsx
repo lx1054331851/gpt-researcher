@@ -2,13 +2,17 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ResearchHistoryItem } from '@/types/data';
 import { useResearchHistoryContext } from '@/hooks/ResearchHistoryContext';
 import LoadingDots from '@/components/LoadingDots';
+import ReportRunSettings from '@/components/Task/ReportRunSettings';
 import { toast } from "react-hot-toast";
 import { useTranslations } from "next-intl";
 import { useAppLocale } from "@/hooks/useAppLocale";
+import { ChatBoxSettings } from "@/types/data";
 
 interface MobileHomeScreenProps {
   promptValue: string;
   setPromptValue: React.Dispatch<React.SetStateAction<string>>;
+  chatBoxSettings: ChatBoxSettings;
+  setChatBoxSettings: React.Dispatch<React.SetStateAction<ChatBoxSettings>>;
   handleDisplayResult: (newQuestion: string) => Promise<void>;
   isLoading?: boolean;
   placeholder?: string;
@@ -18,6 +22,8 @@ interface MobileHomeScreenProps {
 export default function MobileHomeScreen({
   promptValue,
   setPromptValue,
+  chatBoxSettings,
+  setChatBoxSettings,
   handleDisplayResult,
   isLoading = false,
   placeholder,
@@ -191,6 +197,12 @@ export default function MobileHomeScreen({
             </button>
           </div>
         </div>
+        <ReportRunSettings
+          chatBoxSettings={chatBoxSettings}
+          setChatBoxSettings={setChatBoxSettings}
+          compact
+          className="mt-3"
+        />
         <p className="text-xs text-gray-500 mt-2 text-center px-2">
           {t("mobile.homeHint")}
         </p>

@@ -24,7 +24,7 @@ const DEFAULT_CHAT_BOX_SETTINGS: ChatBoxSettings = {
   report_source: "web",
   report_type: "research_report",
   tone: "Objective",
-  report_language: "english",
+  report_language: "chinese",
   domains: [],
   defaultReportType: "research_report",
   layoutType: "copilot",

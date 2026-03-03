@@ -9,13 +9,9 @@ import { useTranslations } from "next-intl";
 interface ChatBoxProps {
   chatBoxSettings: ChatBoxSettings;
   setChatBoxSettings: React.Dispatch<React.SetStateAction<ChatBoxSettings>>;
+  iconOnly?: boolean;
 }
-
-interface Domain {
-  value: string;
-}
-
-const Modal: React.FC<ChatBoxProps> = ({ chatBoxSettings, setChatBoxSettings }) => {
+const Modal: React.FC<ChatBoxProps> = ({ chatBoxSettings, setChatBoxSettings, iconOnly = false }) => {
   const t = useTranslations();
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState('report_settings');
@@ -178,16 +174,22 @@ const Modal: React.FC<ChatBoxProps> = ({ chatBoxSettings, setChatBoxSettings }) 
   return (
     <div className="settings">
       <button
-        className="bg-gray-900 text-white px-6 py-3 rounded-lg shadow-sm hover:shadow-teal-400/10 transition-all duration-300 border border-gray-800 hover:border-teal-500/30"
+        className={
+          iconOnly
+            ? "inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-600/60 bg-gray-900/70 text-gray-100 transition-colors hover:bg-gray-800"
+            : "bg-gray-900 text-white px-6 py-3 rounded-lg shadow-sm hover:shadow-teal-400/10 transition-all duration-300 border border-gray-800 hover:border-teal-500/30"
+        }
         type="button"
+        aria-label={t("settings.preferencesTitle")}
+        title={t("settings.preferencesTitle")}
         onClick={() => setShowModal(true)}
       >
         <span className="flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className={iconOnly ? "h-5 w-5" : "h-5 w-5 mr-2"} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          {t("settings.preferencesTitle")}
+          {!iconOnly && t("settings.preferencesTitle")}
         </span>
       </button>
       {mounted && showModal && createPortal(modalContent, document.body)}
