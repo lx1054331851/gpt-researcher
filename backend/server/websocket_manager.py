@@ -12,6 +12,7 @@ from multi_agents.main import run_research_task
 
 from gpt_researcher.utils.enum import ReportType, Tone
 from gpt_researcher.actions import stream_output  # Import stream_output
+from .multi_agent_runner import run_multi_agent_task
 from .server_utils import CustomLogsHandler
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ class WebSocketManager:
             # Still try to close the connection if possible
             try:
                 await websocket.close()
-            except:
+            except Exception:
                 pass  # If this fails too, there's nothing more we can do
 
     async def start_streaming(
@@ -168,7 +169,7 @@ async def run_agent(
 
     # Initialize researcher based on report type
     if report_type == "multi_agents":
-        report = await run_research_task(
+        report = await run_multi_agent_task(
             query=task, 
             websocket=logs_handler,  # Use logs_handler instead of raw websocket
             stream_output=stream_output, 
