@@ -19,6 +19,7 @@ import { useTranslations } from "next-intl";
 
 // Import mobile components
 import MobileResearchContent from "@/components/mobile/MobileResearchContent";
+import MobileDocumentContent from "@/components/mobile/MobileDocumentContent";
 
 const DEFAULT_CHAT_BOX_SETTINGS: ChatBoxSettings = {
   report_source: "web",
@@ -465,9 +466,26 @@ export default function ResearchPage({ params }: { params: { id: string } }) {
       );
     }
     
-    // Make sure we're loading chat messages for the current research
-    const chatMessages = currentResearchId ? getChatMessages(currentResearchId) : [];
-    
+    if (chatBoxSettings.layoutType === "document") {
+      return (
+        <MobileDocumentContent
+          orderedData={orderedData}
+          answer={answer}
+          allLogs={allLogs}
+          chatBoxSettings={chatBoxSettings}
+          loading={false}
+          isStopped={isStopped}
+          chatPromptValue={chatPromptValue}
+          setChatPromptValue={setChatPromptValue}
+          handleChat={handleChat}
+          isProcessingChat={isProcessingChat}
+          onNewResearch={handleNewResearch}
+          currentResearchId={currentResearchId || undefined}
+          onShareClick={handleCopyUrl}
+        />
+      );
+    }
+
     return (
       <MobileResearchContent
         orderedData={orderedData}

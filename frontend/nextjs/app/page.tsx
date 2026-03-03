@@ -25,6 +25,7 @@ import { getAppropriateLayout } from "@/utils/getLayout";
 // Import the mobile components
 import MobileHomeScreen from "@/components/mobile/MobileHomeScreen";
 import MobileResearchContent from "@/components/mobile/MobileResearchContent";
+import MobileDocumentContent from "@/components/mobile/MobileDocumentContent";
 
 const DEFAULT_CHAT_BOX_SETTINGS: ChatBoxSettings = {
   report_type: "research_report",
@@ -875,6 +876,26 @@ export default function Home() {
         />
       );
     } else {
+      if (chatBoxSettings.layoutType === "document") {
+        return (
+          <MobileDocumentContent
+            orderedData={orderedData}
+            answer={answer}
+            allLogs={allLogs}
+            chatBoxSettings={chatBoxSettings}
+            loading={loading}
+            isStopped={isStopped}
+            chatPromptValue={chatPromptValue}
+            setChatPromptValue={setChatPromptValue}
+            handleChat={handleMobileChat}
+            isProcessingChat={isProcessingChat}
+            onNewResearch={handleStartNewResearch}
+            currentResearchId={currentResearchId || undefined}
+            onShareClick={currentResearchId ? handleCopyUrl : undefined}
+          />
+        );
+      }
+
       return (
         <MobileResearchContent
           orderedData={orderedData}
