@@ -8,6 +8,19 @@ import { ChatBoxSettings, Domain, MCPConfig } from '@/types/data';
 import { useTranslations } from "next-intl";
 import { useAppLocale } from "@/hooks/useAppLocale";
 
+const DEFAULT_WORD_FONTS = ["仿宋", "FangSong", "STFangsong"];
+
+const parseWordFonts = (rawFonts: string): string[] => {
+  const uniqueFonts = new Set(
+    rawFonts
+      .split(/[,，;\n]+/)
+      .map((font) => font.trim())
+      .filter(Boolean)
+  );
+
+  return Array.from(uniqueFonts);
+};
+
 interface ResearchFormProps {
   chatBoxSettings: ChatBoxSettings;
   setChatBoxSettings: React.Dispatch<React.SetStateAction<ChatBoxSettings>>;
@@ -20,6 +33,9 @@ export default function ResearchForm({
   const t = useTranslations();
   const { locale, setLocale } = useAppLocale();
   const [newDomain, setNewDomain] = useState('');
+  const [wordFontsInput, setWordFontsInput] = useState(
+    (chatBoxSettings.word_fonts?.length ? chatBoxSettings.word_fonts : DEFAULT_WORD_FONTS).join(", ")
+  );
 
   // Destructure necessary fields from chatBoxSettings
   let { report_source, layoutType } = chatBoxSettings;
@@ -67,6 +83,17 @@ export default function ResearchForm({
     }));
   };
 
+  const onWordFontsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextInput = e.target.value;
+    setWordFontsInput(nextInput);
+
+    const parsedFonts = parseWordFonts(nextInput);
+    setChatBoxSettings((prevSettings: any) => ({
+      ...prevSettings,
+      word_fonts: parsedFonts.length ? parsedFonts : DEFAULT_WORD_FONTS,
+    }));
+  };
+
   return (
     <div className="report_settings_static mt-3">
       <div className="form-group">
@@ -80,6 +107,20 @@ export default function ResearchForm({
             { value: "zh-CN", label: t("settings.uiLanguage.zh-CN") },
           ]}
         />
+      </div>
+
+      <div className="form-group">
+        <label className="agent_question" htmlFor="word_fonts">
+          {t("settings.wordFontsLabel")}
+        </label>
+        <input
+          id="word_fonts"
+          type="text"
+          value={wordFontsInput}
+          onChange={onWordFontsChange}
+          placeholder={t("settings.wordFontsPlaceholder")}
+        />
+        <small className="text-muted">{t("settings.wordFontsHelp")}</small>
       </div>
 
       {report_source === "local" || report_source === "hybrid" ? (

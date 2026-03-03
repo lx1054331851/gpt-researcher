@@ -42,6 +42,7 @@ export const GPTResearcher = ({
     report_type: 'research_report', 
     tone: 'Objective',
     report_language: 'chinese',
+    word_fonts: ['仿宋', 'FangSong', 'STFangsong'],
     domains: [],
     defaultReportType: 'research_report',
     layoutType: 'default',

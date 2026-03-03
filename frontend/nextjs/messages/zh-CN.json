@@ -56,6 +56,9 @@
       "en": "English (en)",
       "zh-CN": "简体中文 (zh-CN)"
     },
+    "wordFontsLabel": "Word 导出字体",
+    "wordFontsPlaceholder": "例如：仿宋, FangSong, STFangsong",
+    "wordFontsHelp": "可输入多个字体（逗号分隔），将按顺序优先使用。",
     "toneLabel": "语气",
     "toneOptions": {
       "Objective": "客观",

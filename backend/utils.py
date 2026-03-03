@@ -2,6 +2,71 @@ import aiofiles
 import urllib
 import mistune
 import os
+import re
+from typing import Iterable, List, Optional
+
+DEFAULT_WORD_FONT_CHAIN = ["仿宋", "FangSong", "STFangsong"]
+
+
+def _normalize_word_fonts(word_fonts: Optional[Iterable[str] | str]) -> List[str]:
+    if word_fonts is None:
+        env_fonts = os.getenv("WORD_EXPORT_FONTS", "")
+        word_fonts = env_fonts if env_fonts else DEFAULT_WORD_FONT_CHAIN
+
+    if isinstance(word_fonts, str):
+        candidates = [font.strip() for font in re.split(r"[,，;\n]+", word_fonts)]
+    else:
+        candidates = [str(font).strip() for font in word_fonts]
+
+    deduped_fonts = []
+    seen_fonts = set()
+    for font in candidates:
+        if font and font not in seen_fonts:
+            deduped_fonts.append(font)
+            seen_fonts.add(font)
+
+    return deduped_fonts or DEFAULT_WORD_FONT_CHAIN.copy()
+
+
+def _set_r_fonts(target, east_asia_font: str, latin_font: str, complex_script_font: str) -> None:
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    r_pr = target._element.get_or_add_rPr()
+    r_fonts = r_pr.rFonts
+    if r_fonts is None:
+        r_fonts = OxmlElement("w:rFonts")
+        r_pr.append(r_fonts)
+
+    r_fonts.set(qn("w:eastAsia"), east_asia_font)
+    r_fonts.set(qn("w:ascii"), latin_font)
+    r_fonts.set(qn("w:hAnsi"), latin_font)
+    r_fonts.set(qn("w:cs"), complex_script_font)
+
+
+def _apply_word_fonts(doc, font_chain: List[str]) -> None:
+    east_asia_font = font_chain[0]
+    latin_font = font_chain[1] if len(font_chain) > 1 else east_asia_font
+    complex_script_font = font_chain[2] if len(font_chain) > 2 else east_asia_font
+
+    for style_name in ("Normal", "Heading 1", "Heading 2", "Heading 3", "Heading 4"):
+        if style_name in doc.styles:
+            style = doc.styles[style_name]
+            style.font.name = latin_font
+            _set_r_fonts(style, east_asia_font, latin_font, complex_script_font)
+
+    for paragraph in doc.paragraphs:
+        for run in paragraph.runs:
+            run.font.name = latin_font
+            _set_r_fonts(run, east_asia_font, latin_font, complex_script_font)
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        run.font.name = latin_font
+                        _set_r_fonts(run, east_asia_font, latin_font, complex_script_font)
 
 async def write_to_file(filename: str, text: str) -> None:
     """Asynchronously write text to a file in UTF-8 encoding.
@@ -96,11 +161,16 @@ async def write_md_to_pdf(text: str, filename: str = "") -> str:
     encoded_file_path = urllib.parse.quote(file_path)
     return encoded_file_path
 
-async def write_md_to_word(text: str, filename: str = "") -> str:
+async def write_md_to_word(
+    text: str,
+    filename: str = "",
+    word_fonts: Optional[Iterable[str] | str] = None
+) -> str:
     """Converts Markdown text to a DOCX file and returns the file path.
 
     Args:
         text (str): Markdown text to convert.
+        word_fonts: Priority font list for DOCX export. First is preferred.
 
     Returns:
         str: The encoded file path of the generated DOCX.
@@ -116,6 +186,7 @@ async def write_md_to_word(text: str, filename: str = "") -> str:
         doc = Document()
         # Convert the html generated from the report to document format
         HtmlToDocx().add_html_to_document(html, doc)
+        _apply_word_fonts(doc, _normalize_word_fonts(word_fonts))
 
         # Saving the docx document to file_path
         doc.save(file_path)

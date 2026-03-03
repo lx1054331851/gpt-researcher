@@ -59,6 +59,7 @@ class ResearchRequest(BaseModel):
     report_type: str
     report_source: str
     tone: str
+    word_fonts: List[str] | None = None
     headers: dict | None = None
     repo_name: str
     branch_name: str
@@ -291,7 +292,11 @@ async def write_report(research_request: ResearchRequest, research_id: str = Non
         return_researcher=True
     )
 
-    docx_path = await write_md_to_word(report_information[0], research_id)
+    docx_path = await write_md_to_word(
+        report_information[0],
+        research_id,
+        word_fonts=research_request.word_fonts,
+    )
     pdf_path = await write_md_to_pdf(report_information[0], research_id)
     if research_request.report_type != "multi_agents":
         report, researcher = report_information

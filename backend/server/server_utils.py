@@ -204,6 +204,7 @@ async def handle_start_command(websocket, data: str, manager):
         mcp_enabled,
         mcp_strategy,
         mcp_configs,
+        word_fonts,
     ) = extract_command_data(json_data)
 
     if not task or not report_type:
@@ -238,7 +239,7 @@ async def handle_start_command(websocket, data: str, manager):
         mcp_configs,
     )
     report = str(report)
-    file_paths = await generate_report_files(report, sanitized_filename)
+    file_paths = await generate_report_files(report, sanitized_filename, word_fonts=word_fonts)
     # Add JSON log path to file_paths
     file_paths["json"] = os.path.relpath(logs_handler.log_file)
     await send_file_paths(websocket, file_paths)
@@ -319,9 +320,9 @@ async def handle_chat_command(websocket, data: str):
             "role": "assistant"
         }, context="chat/unhandled-error")
 
-async def generate_report_files(report: str, filename: str) -> Dict[str, str]:
+async def generate_report_files(report: str, filename: str, word_fonts: List[str] | None = None) -> Dict[str, str]:
     pdf_path = await write_md_to_pdf(report, filename)
-    docx_path = await write_md_to_word(report, filename)
+    docx_path = await write_md_to_word(report, filename, word_fonts=word_fonts)
     md_path = await write_text_to_md(report, filename)
     return {"pdf": pdf_path, "docx": docx_path, "md": md_path}
 
@@ -499,4 +500,5 @@ def extract_command_data(json_data: Dict) -> tuple:
         json_data.get("mcp_enabled", False),
         json_data.get("mcp_strategy", "fast"),
         json_data.get("mcp_configs", []),
+        json_data.get("word_fonts", []),
     )
