@@ -11,7 +11,13 @@ import json_repair
 
 from ..config import Config
 from ..llm_provider.generic.base import ReasoningEfforts
-from ..orchestration.coverage_lenses import assess_text_coverage, coverage_lens_prompt_block
+from ..orchestration.coverage_lenses import (
+    assess_chain_coverage,
+    assess_text_coverage,
+    coverage_chain_prompt_block,
+    coverage_lens_prompt_block,
+    resolve_chain_steps,
+)
 from ..orchestration.outline_schema import (
     ResearchOutline,
     ReportBlueprint,
@@ -59,6 +65,13 @@ def _outline_text_segments(outline: ResearchOutline) -> list[str]:
 
 def assess_outline_coverage(outline: ResearchOutline) -> dict[str, Any]:
     return assess_text_coverage(_outline_text_segments(outline))
+
+
+def assess_outline_chain_coverage(
+    outline: ResearchOutline,
+    chain_steps: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return assess_chain_coverage(_outline_text_segments(outline), chain_steps=chain_steps)
 
 
 def _fallback_outline(query: str, user_requirements: str | None = None) -> ResearchOutline:
@@ -179,6 +192,12 @@ async def generate_outline(
     requirements = (user_requirements or "").strip()
     language_hint = language or config.language or "english"
     coverage_lenses_block = coverage_lens_prompt_block()
+    chain_steps = resolve_chain_steps(
+        profile_mode=str(getattr(config, "adaptive_chain_profile_mode", "generic") or "generic"),
+        industry_profile=str(getattr(config, "adaptive_chain_industry_profile", "auto") or "auto"),
+        query=query,
+    )
+    coverage_chain_block = coverage_chain_prompt_block(chain_steps)
 
     prompt = f"""
 You are planning a deep-research workflow.
@@ -192,6 +211,9 @@ Source policy: {source_policy or "medium_tier"}
 
 Coverage lenses to maximize breadth (avoid single-dimension planning):
 {coverage_lenses_block}
+
+Coverage chain to preserve explicit end-to-end logic:
+{coverage_chain_block}
 
 JSON schema:
 {{
@@ -231,6 +253,8 @@ Constraints:
 - Keep titles specific and decision-oriented.
 - Workstreams should follow a practical execution chain and be directly related to the query.
 - Sections/workstreams should jointly cover as many coverage lenses as possible.
+- Sections/workstreams should explicitly map to the chain:
+  industry -> brand/entity -> demand -> materials/inputs -> technology/process -> execution.
 - Keep dimensions orthogonal; avoid repeating near-identical themes.
 """
 
@@ -266,6 +290,9 @@ Constraints:
     coverage_enhancer_enabled = bool(getattr(config, "adaptive_coverage_enhancer_enabled", False))
     coverage_min_ratio = max(0.0, min(1.0, float(getattr(config, "adaptive_coverage_min_ratio", 0.75))))
     coverage_revise_rounds = max(0, int(getattr(config, "adaptive_coverage_revise_max_rounds", 1)))
+    chain_enforcer_enabled = bool(getattr(config, "adaptive_chain_enforcer_enabled", True))
+    chain_min_ratio = max(0.0, min(1.0, float(getattr(config, "adaptive_chain_min_ratio", 0.90))))
+    chain_patch_rounds = max(0, int(getattr(config, "adaptive_chain_patch_max_rounds", 1)))
 
     if coverage_enhancer_enabled:
         coverage = assess_outline_coverage(outline)
@@ -295,6 +322,38 @@ Constraints:
                 + ", ".join(coverage.get("missing_labels") or [])
             )
 
+    if chain_enforcer_enabled:
+        chain_coverage = assess_outline_chain_coverage(outline, chain_steps=chain_steps)
+        attempts = 0
+        while (
+            (chain_coverage.get("ratio", 0.0) < chain_min_ratio or bool(chain_coverage.get("missing_ids")))
+            and attempts < chain_patch_rounds
+        ):
+            missing_chain = chain_coverage.get("missing_labels") or []
+            revise_instruction = (
+                "Improve outline chain completeness. Explicitly cover the chain "
+                "(industry -> brand/entity -> demand -> materials/inputs -> technology/process -> execution). "
+                f"Missing chain steps: {', '.join(missing_chain) if missing_chain else 'none'}."
+            )
+            revised_outline, _ = await revise_outline(
+                outline=outline,
+                instruction=revise_instruction,
+                language=language,
+                report_style=report_style,
+                source_policy=source_policy,
+                cfg=config,
+            )
+            outline = revised_outline
+            chain_coverage = assess_outline_chain_coverage(outline, chain_steps=chain_steps)
+            attempts += 1
+
+        if chain_coverage.get("ratio", 0.0) < chain_min_ratio or bool(chain_coverage.get("missing_ids")):
+            outline.constraints = list(outline.constraints or [])
+            outline.constraints.append(
+                "Chain coverage gap retained after auto-revision. Missing chain steps: "
+                + ", ".join(chain_coverage.get("missing_labels") or [])
+            )
+
     blueprint = build_blueprint_from_outline(outline)
     return outline, blueprint
 
@@ -316,6 +375,12 @@ async def revise_outline(
 
     language_hint = language or config.language or "english"
     coverage_lenses_block = coverage_lens_prompt_block()
+    chain_steps = resolve_chain_steps(
+        profile_mode=str(getattr(config, "adaptive_chain_profile_mode", "generic") or "generic"),
+        industry_profile=str(getattr(config, "adaptive_chain_industry_profile", "auto") or "auto"),
+        query=outline.query,
+    )
+    coverage_chain_block = coverage_chain_prompt_block(chain_steps)
     prompt = f"""
 Rewrite the following research outline according to the instruction.
 Return JSON only.
@@ -326,6 +391,8 @@ Report style: {report_style or "strategic_report"}
 Source policy: {source_policy or "medium_tier"}
 Coverage lenses to preserve breadth:
 {coverage_lenses_block}
+Coverage chain to preserve end-to-end logic:
+{coverage_chain_block}
 
 Current outline JSON:
 {outline.to_dict()}
@@ -367,6 +434,8 @@ Hard constraints:
 - Keep section count between 3 and 10.
 - Keep workstreams non-empty and aligned with the query objective.
 - Keep sections/workstreams broadly covering the coverage lenses instead of collapsing into one angle.
+- Keep explicit chain coverage:
+  industry -> brand/entity -> demand -> materials/inputs -> technology/process -> execution.
 """
 
     revised_outline: ResearchOutline | None = None

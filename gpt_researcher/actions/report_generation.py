@@ -8,6 +8,7 @@ from ..orchestration.coverage_lenses import (
     assess_text_coverage,
     coverage_chain_prompt_block,
     coverage_lens_prompt_block,
+    resolve_chain_steps,
 )
 from ..utils.llm import create_chat_completion
 from ..utils.logger import get_formatted_logger
@@ -42,6 +43,39 @@ DECISION_SHEET_PATTERN = re.compile(
     r"\|\s*(?:option|方案)\s*\|\s*(?:expected value|预期价值)\s*\|\s*(?:feasibility|可行性)\s*\|",
     flags=re.IGNORECASE,
 )
+
+EXPLICIT_CHAIN_SECTION_RULES: list[dict[str, Any]] = [
+    {
+        "id": "industry",
+        "label": "Industry",
+        "keywords": ["industry", "macro", "sector", "行业", "宏观", "赛道"],
+    },
+    {
+        "id": "brand",
+        "label": "Brand",
+        "keywords": ["brand", "entity", "group strategy", "品牌", "集团", "对象"],
+    },
+    {
+        "id": "demand",
+        "label": "Demand",
+        "keywords": ["demand", "stakeholder", "consumer", "需求", "消费者", "利益相关方"],
+    },
+    {
+        "id": "material",
+        "label": "Material",
+        "keywords": ["material", "raw material", "fiber", "input", "材料", "原材料", "纤维"],
+    },
+    {
+        "id": "technology",
+        "label": "Technology",
+        "keywords": ["technology", "process", "pathway", "技术", "工艺", "技术路径"],
+    },
+    {
+        "id": "execution",
+        "label": "Execution",
+        "keywords": ["execution", "rollout", "roadmap", "implementation", "落地", "执行", "路线图"],
+    },
+]
 
 
 def evaluate_report_completeness(
@@ -337,6 +371,53 @@ def _extract_h2_titles(markdown_text: str) -> list[str]:
     return titles
 
 
+def _check_explicit_chain_sections(report: str) -> dict[str, Any]:
+    headings = _extract_h2_titles(report or "")
+    matched_positions: dict[str, int] = {}
+    matched_titles: dict[str, str] = {}
+
+    for idx, heading in enumerate(headings):
+        normalized = heading.lower().strip()
+        for rule in EXPLICIT_CHAIN_SECTION_RULES:
+            rid = str(rule["id"])
+            if rid in matched_positions:
+                continue
+            keywords = [str(k).lower() for k in (rule.get("keywords") or []) if str(k).strip()]
+            if any(keyword in normalized for keyword in keywords):
+                matched_positions[rid] = idx
+                matched_titles[rid] = heading
+
+    expected_ids = [str(rule["id"]) for rule in EXPLICIT_CHAIN_SECTION_RULES]
+    missing_ids = [rid for rid in expected_ids if rid not in matched_positions]
+    explicit_ok = len(missing_ids) == 0
+    ordered_positions = [matched_positions[rid] for rid in expected_ids if rid in matched_positions]
+    order_ok = explicit_ok and ordered_positions == sorted(ordered_positions)
+    return {
+        "explicit_ok": explicit_ok,
+        "order_ok": order_ok,
+        "missing_ids": missing_ids,
+        "matched_titles": matched_titles,
+    }
+
+
+def _calculate_reference_url_ratio(report: str) -> float:
+    _body, reference_section = _split_report_references(report or "")
+    if not reference_section.strip():
+        return 0.0
+    lines = [
+        line.strip()
+        for line in reference_section.splitlines()
+        if line.strip().startswith("-")
+    ]
+    if not lines:
+        return 0.0
+    with_url = 0
+    for line in lines:
+        if MARKDOWN_LINK_PATTERN.search(line) or URL_PATTERN.search(line):
+            with_url += 1
+    return round(with_url / max(1, len(lines)), 4)
+
+
 def _extract_query_focus_tokens(query: str) -> list[str]:
     raw = re.findall(r"[\u4e00-\u9fff]{2,}|[A-Za-z][A-Za-z0-9_-]{2,}", str(query or ""))
     stopwords = {
@@ -441,8 +522,11 @@ def _evaluate_coverage_lens_report(report: str) -> dict[str, Any]:
     return assess_text_coverage([report or ""])
 
 
-def _evaluate_chain_coverage_report(report: str) -> dict[str, Any]:
-    return assess_chain_coverage([report or ""])
+def _evaluate_chain_coverage_report(
+    report: str,
+    chain_steps: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return assess_chain_coverage([report or ""], chain_steps=chain_steps)
 
 
 async def _patch_coverage_gaps_once(
@@ -452,6 +536,7 @@ async def _patch_coverage_gaps_once(
     context: str,
     missing_lenses: list[str],
     missing_chain_steps: list[str] | None,
+    chain_steps: list[dict[str, Any]] | None,
     language: str,
     tone: Tone,
     source_policy: str,
@@ -477,7 +562,7 @@ Coverage lenses reference:
 {coverage_lens_prompt_block()}
 
 Coverage chain reference:
-{coverage_chain_prompt_block()}
+{coverage_chain_prompt_block(chain_steps)}
 
 Task:
 - Append concise markdown subsections to close missing lenses.
@@ -524,6 +609,8 @@ async def _patch_adaptive_artifacts_once(
     tone: Tone,
     source_policy: str,
     adaptive_style_instruction: str,
+    missing_chain_sections: list[str] | None,
+    chain_order_issue: bool,
     cfg,
     agent_role_prompt: str,
     websocket,
@@ -542,6 +629,10 @@ Add concise markdown-only content to ensure:
    - give reason + follow-up evidence action.
 2) A compact "Decision Sheet" table with columns:
    Option | Expected Value | Feasibility | Main Risk | First Experiment | Go/No-Go Signal
+3) Explicit chain sections exist and follow this order:
+   Industry -> Brand -> Demand -> Material -> Technology -> Execution
+   Also include this mapping line exactly once:
+   Chain Map: 行业→品牌→需求→材料→技术→落地
 
 Rules:
 - Append only incremental content; do not rewrite existing sections.
@@ -549,6 +640,10 @@ Rules:
 - Use markdown links for citations where possible.
 - Write in {language}; tone: {tone.value}.
 - {adaptive_style_instruction}
+
+Missing explicit chain sections:
+{", ".join(missing_chain_sections or []) if missing_chain_sections else "none"}
+Chain section order issue: {"yes" if chain_order_issue else "no"}
 
 Research query:
 {query}
@@ -1311,6 +1406,18 @@ async def generate_report(
     coverage_enhancer_enabled = bool(getattr(cfg, "adaptive_coverage_enhancer_enabled", False))
     coverage_min_ratio = max(0.0, min(1.0, float(getattr(cfg, "adaptive_coverage_min_ratio", 0.75))))
     coverage_profile = str(getattr(cfg, "adaptive_coverage_profile", "balanced") or "balanced").strip().lower()
+    chain_enforcer_enabled = bool(getattr(cfg, "adaptive_chain_enforcer_enabled", True))
+    chain_min_ratio = max(0.0, min(1.0, float(getattr(cfg, "adaptive_chain_min_ratio", 0.90))))
+    chain_require_explicit_sections = bool(getattr(cfg, "adaptive_chain_require_explicit_sections", True))
+    chain_patch_max_rounds = max(1, int(getattr(cfg, "adaptive_chain_patch_max_rounds", 1)))
+    chain_profile_mode = str(getattr(cfg, "adaptive_chain_profile_mode", "dual") or "dual").strip().lower()
+    chain_industry_profile = str(getattr(cfg, "adaptive_chain_industry_profile", "auto") or "auto").strip().lower()
+    chain_steps = resolve_chain_steps(
+        profile_mode=chain_profile_mode,
+        industry_profile=chain_industry_profile,
+        query=str(query or ""),
+    )
+    reference_url_min_ratio = max(0.0, min(1.0, float(getattr(cfg, "adaptive_reference_url_min_ratio", 0.80))))
     require_sections = report_type != "subtopic_report"
     context_text = str(context)
 
@@ -1357,6 +1464,10 @@ ADAPTIVE_DEEP_WRITING_CONSTRAINTS:
 - Avoid generic methodology-only output that does not answer the research objective.
 - Maintain broad lens coverage (scope, baseline, options, demand/stakeholders, economics, risk/compliance, benchmark, actions).
 - Preserve a coherent chain: macro context -> focal baseline -> demand -> supply/input constraints -> options -> execution.
+- Use explicit chain sections (or clear synonyms) for:
+  Industry -> Brand -> Demand -> Material -> Technology -> Execution.
+- Include one explicit mapping line in the report:
+  Chain Map: 行业→品牌→需求→材料→技术→落地
 - Add embedded "Coverage Check" / "Gap Notes" when some lenses are weakly covered.
 - Include one compact decision table: Option | Expected Value | Feasibility | Main Risk | First Experiment | Go/No-Go Signal.
 - {adaptive_style_instruction}
@@ -1615,12 +1726,16 @@ Rules:
     coverage_patch_applied = False
     chain_patch_applied = False
     adaptive_artifact_patch_applied = False
-    chain_min_ratio = 0.72 if coverage_profile == "high_coverage" else 0.6
     coverage_report = _evaluate_coverage_lens_report(report) if adaptive_mode else {"ratio": 1.0, "missing_labels": []}
-    chain_report = _evaluate_chain_coverage_report(report) if adaptive_mode else {"ratio": 1.0, "missing_labels": []}
-    if adaptive_mode and coverage_enhancer_enabled and (
+    chain_report = (
+        _evaluate_chain_coverage_report(report, chain_steps=chain_steps)
+        if adaptive_mode else {"ratio": 1.0, "missing_labels": []}
+    )
+    chain_patch_reason = "none"
+    if adaptive_mode and (coverage_enhancer_enabled or chain_enforcer_enabled) and (
         coverage_report.get("ratio", 0.0) < coverage_min_ratio
         or chain_report.get("ratio", 0.0) < chain_min_ratio
+        or bool(chain_report.get("missing_ids"))
     ):
         report, coverage_patch_applied = await _patch_coverage_gaps_once(
             report=report,
@@ -1628,6 +1743,7 @@ Rules:
             context=context_text,
             missing_lenses=list(coverage_report.get("missing_labels") or []),
             missing_chain_steps=list(chain_report.get("missing_labels") or []),
+            chain_steps=chain_steps,
             language=cfg.language,
             tone=tone,
             source_policy=source_policy,
@@ -1640,12 +1756,23 @@ Rules:
             **kwargs,
         )
         coverage_report = _evaluate_coverage_lens_report(report)
-        chain_report = _evaluate_chain_coverage_report(report)
+        chain_report = _evaluate_chain_coverage_report(report, chain_steps=chain_steps)
         chain_patch_applied = True
+        chain_patch_reason = "coverage_or_chain_gap"
 
+    chain_section_status = _check_explicit_chain_sections(report)
     missing_coverage_check = not bool(COVERAGE_CHECK_PATTERN.search(report or ""))
     missing_decision_sheet = not bool(DECISION_SHEET_PATTERN.search(report or ""))
-    if adaptive_mode and (missing_coverage_check or missing_decision_sheet):
+    artifact_patch_round = 0
+    while adaptive_mode and artifact_patch_round < chain_patch_max_rounds:
+        needs_artifact_patch = bool(missing_coverage_check or missing_decision_sheet)
+        if chain_require_explicit_sections:
+            needs_artifact_patch = needs_artifact_patch or not bool(
+                chain_section_status.get("explicit_ok") and chain_section_status.get("order_ok")
+            )
+        if not needs_artifact_patch:
+            break
+
         report, adaptive_artifact_patch_applied = await _patch_adaptive_artifacts_once(
             report=report,
             query=query,
@@ -1654,6 +1781,8 @@ Rules:
             tone=tone,
             source_policy=source_policy,
             adaptive_style_instruction=adaptive_style_instruction,
+            missing_chain_sections=list(chain_section_status.get("missing_ids") or []),
+            chain_order_issue=not bool(chain_section_status.get("order_ok")),
             cfg=cfg,
             agent_role_prompt=agent_role_prompt,
             websocket=websocket,
@@ -1661,10 +1790,13 @@ Rules:
             finish_reason_callback=_capture_finish_reason,
             **kwargs,
         )
+        artifact_patch_round += 1
         missing_coverage_check = not bool(COVERAGE_CHECK_PATTERN.search(report or ""))
         missing_decision_sheet = not bool(DECISION_SHEET_PATTERN.search(report or ""))
         coverage_report = _evaluate_coverage_lens_report(report)
-        chain_report = _evaluate_chain_coverage_report(report)
+        chain_report = _evaluate_chain_coverage_report(report, chain_steps=chain_steps)
+        chain_section_status = _check_explicit_chain_sections(report)
+        chain_patch_reason = "missing_artifacts_or_explicit_chain_sections"
 
     coverage_ratio = float(coverage_report.get("ratio", 0.0))
     coverage_missing_lenses = list(coverage_report.get("missing_labels") or [])
@@ -1672,13 +1804,16 @@ Rules:
     chain_coverage_ratio = float(chain_report.get("ratio", 0.0)) if adaptive_mode else 1.0
     chain_missing_steps = list(chain_report.get("missing_labels") or []) if adaptive_mode else []
     chain_coverage_ok = (
-        chain_coverage_ratio >= chain_min_ratio if (adaptive_mode and coverage_enhancer_enabled) else True
+        chain_coverage_ratio >= chain_min_ratio and not bool(chain_report.get("missing_ids"))
+        if (adaptive_mode and chain_enforcer_enabled) else True
     )
 
     reference_hygiene_meta = {
         "reference_url_count": 0,
         "reference_hygiene_changed": False,
         "reference_had_existing_section": False,
+        "reference_url_ratio": 0.0,
+        "reference_url_ratio_ok": True,
     }
     report_source_normalized = str(report_source or "").strip().lower()
     if "web" in report_source_normalized:
@@ -1687,6 +1822,14 @@ Rules:
             cfg.language,
             extra_context=context_text,
         )
+        reference_ratio = _calculate_reference_url_ratio(report)
+        reference_hygiene_meta["reference_url_ratio"] = reference_ratio
+        reference_hygiene_meta["reference_url_ratio_ok"] = reference_ratio >= reference_url_min_ratio
+    else:
+        reference_ratio = 1.0
+
+    explicit_chain_sections_ok = bool(chain_section_status.get("explicit_ok"))
+    chain_section_order_ok = bool(chain_section_status.get("order_ok"))
 
     goal_alignment_ok = True
     goal_alignment_issues: list[str] = []
@@ -1732,12 +1875,16 @@ Rules:
                 "chain_coverage_ok": chain_coverage_ok,
                 "chain_missing_steps": chain_missing_steps,
                 "chain_patch_applied": chain_patch_applied,
+                "chain_patch_reason": chain_patch_reason,
+                "explicit_chain_sections_ok": explicit_chain_sections_ok,
+                "chain_section_order_ok": chain_section_order_ok,
                 "adaptive_artifact_patch_applied": adaptive_artifact_patch_applied,
                 "missing_coverage_check": missing_coverage_check,
                 "missing_decision_sheet": missing_decision_sheet,
                 "report_style": report_style,
                 "source_policy": source_policy,
                 "reference_hygiene": reference_hygiene_meta,
+                "reference_url_ratio": reference_ratio,
             }
         )
 

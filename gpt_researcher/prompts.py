@@ -575,6 +575,10 @@ Required output behavior:
 - Keep an explicit narrative chain:
   macro context -> focal target baseline -> demand/stakeholders -> supply/input constraints
   -> options/tradeoffs -> execution roadmap and decision actions.
+- Include explicit section headers (or close synonyms) for:
+  Industry, Brand, Demand, Material, Technology, Execution.
+- Include this exact mapping line once:
+  Chain Map: 行业→品牌→需求→材料→技术→落地
 - Include an embedded subsection such as "Coverage Check" and/or "Gap Notes":
   - state which coverage lenses are addressed,
   - identify missing lenses (if any),

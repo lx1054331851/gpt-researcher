@@ -35,6 +35,7 @@ from gpt_researcher.orchestration.coverage_lenses import (
     assess_text_coverage,
     coverage_chain_prompt_block,
     coverage_lens_prompt_block,
+    resolve_chain_steps,
 )
 
 from ..actions.query_processing import get_search_results
@@ -140,6 +141,23 @@ class AdaptiveDeepResearchSkill:
         self.coverage_profile = str(getattr(self.cfg, "adaptive_coverage_profile", "balanced") or "balanced").strip().lower()
         if self.coverage_profile not in {"balanced", "high_coverage"}:
             self.coverage_profile = "balanced"
+        self.chain_enforcer_enabled = bool(getattr(self.cfg, "adaptive_chain_enforcer_enabled", True))
+        self.chain_min_ratio = max(0.0, min(1.0, float(getattr(self.cfg, "adaptive_chain_min_ratio", 0.90))))
+        self.chain_require_explicit_sections = bool(
+            getattr(self.cfg, "adaptive_chain_require_explicit_sections", True)
+        )
+        self.chain_profile_mode = str(getattr(self.cfg, "adaptive_chain_profile_mode", "dual") or "dual").strip().lower()
+        if self.chain_profile_mode not in {"generic", "dual"}:
+            self.chain_profile_mode = "dual"
+        self.chain_industry_profile = str(
+            getattr(self.cfg, "adaptive_chain_industry_profile", "auto") or "auto"
+        ).strip().lower()
+        self.chain_patch_max_rounds = max(1, int(getattr(self.cfg, "adaptive_chain_patch_max_rounds", 1)))
+        self.chain_steps = resolve_chain_steps(
+            profile_mode=self.chain_profile_mode,
+            industry_profile=self.chain_industry_profile,
+            query=str(getattr(self.researcher, "query", "") or ""),
+        )
 
         self.entropy_tracker = EntropyTracker(min_gain=self.entropy_min_gain, patience=2)
         self.saliency_detector = SaliencyDetector(self.saliency_threshold)
@@ -168,6 +186,8 @@ class AdaptiveDeepResearchSkill:
         self.node_seen_queries: dict[str, set[str]] = {}
         self._node_runtime_flags: dict[str, set[str]] = {}
         self.node_failure_stats: dict[str, dict[str, int]] = {}
+        self._node_chain_low_hit_streak: dict[str, int] = {}
+        self._covered_chain_step_ids: set[str] = set()
         self.failed_domains: Counter[str] = Counter()
         self.blocked_domains: set[str] = set()
         self.claim_ledger: list[dict[str, Any]] = []
@@ -187,6 +207,7 @@ class AdaptiveDeepResearchSkill:
             "chain_coverage_ratio": 0.0,
             "chain_missing_steps_count": 0,
             "chain_missing_steps": [],
+            "chain_step_query_coverage": [],
         }
 
     async def run(self, on_progress=None) -> str:
@@ -209,7 +230,7 @@ class AdaptiveDeepResearchSkill:
         self.diagnostics["coverage_ratio"] = coverage.get("ratio", 0.0)
         self.diagnostics["coverage_missing_lenses_count"] = len(coverage.get("missing_ids") or [])
         self.diagnostics["coverage_missing_lenses"] = list(coverage.get("missing_labels") or [])
-        chain_coverage = assess_chain_coverage(dimensions or [])
+        chain_coverage = assess_chain_coverage(dimensions or [], chain_steps=self.chain_steps)
         self.diagnostics["chain_coverage_ratio"] = chain_coverage.get("ratio", 0.0)
         self.diagnostics["chain_missing_steps_count"] = len(chain_coverage.get("missing_ids") or [])
         self.diagnostics["chain_missing_steps"] = list(chain_coverage.get("missing_labels") or [])
@@ -792,14 +813,17 @@ Coverage lenses to maximize breadth:
 {coverage_lens_prompt_block()}
 
 Coverage chain to preserve narrative completeness:
-{coverage_chain_prompt_block()}
+{coverage_chain_prompt_block(self.chain_steps)}
 
 Requirements:
 - Dimensions must be mutually distinct (avoid near-duplicate wording).
 - Avoid single-angle plans (for example only technical or only market).
 - Include both evidence collection and execution-oriented dimensions.
-- Ensure the set can support a coherent chain from macro context -> focal objective -> demand -> supply/constraints -> options -> execution.
+- Ensure the set can support this chain explicitly:
+  industry -> brand -> demand -> material/input -> technology/process -> execution.
 - Return a JSON list of strings only.
+- Prefix each dimension with one stage tag, e.g.:
+  [industry], [brand], [demand], [material], [technology], [execution].
 """
         try:
             if self.diagnostics["query_matrix_fallbacks"] >= self.query_matrix_llm_disable_after_failures:
@@ -823,19 +847,22 @@ Requirements:
             logger.warning(f"Dimension planning fallback triggered: {exc}")
 
         fallback_dimensions = [
-            f"Macro context and external trajectory for {query}",
-            f"Focal target positioning and baseline evidence for {query}",
-            f"Stakeholder demand and user signals for {query}",
-            f"Supply/input constraints and enabling infrastructure for {query}",
-            f"Economics and operational feasibility for {query}",
-            f"Risk, compliance, and uncertainty for {query}",
-            f"Option space with comparative tradeoffs for {query}",
-            f"Competition and external benchmarks for {query}",
-            f"Roadmap, pilot milestones, and next actions for {query}",
+            f"[industry] Industry context and external trajectory for {query}",
+            f"[brand] Brand/entity positioning and baseline for {query}",
+            f"[demand] Demand and stakeholder signals for {query}",
+            f"[material] Materials/inputs and upstream constraints for {query}",
+            f"[technology] Technology/process pathways for {query}",
+            f"[execution] Execution roadmap, pilot milestones, and next actions for {query}",
+            f"[execution] Economics and operational feasibility for {query}",
+            f"[execution] Risk, compliance, and uncertainty for {query}",
         ]
         return fallback_dimensions[: self.max_dimensions]
 
     async def _generate_query_matrix(self, node: TaskNode, round_index: int) -> list[str]:
+        uncovered_steps = [step for step in self.chain_steps if str(step.get("id")) not in self._covered_chain_step_ids]
+        uncovered_step_ids = [str(step.get("id")) for step in uncovered_steps if str(step.get("id"))]
+        uncovered_step_labels = [str(step.get("label")) for step in uncovered_steps if str(step.get("label"))]
+        min_required_uncovered_hits = min(3, len(uncovered_steps))
         prompt = f"""
 Generate up to {self.breadth} search queries for this research node.
 Node: {node.title}
@@ -853,8 +880,12 @@ Use mixed query intents across:
 - latest developments and source verification
 - macro context signals, focal-target evidence, stakeholder demand, and supply/input constraints
 
+Currently uncovered chain steps:
+{", ".join(uncovered_step_labels) if uncovered_step_labels else "none"}
+
 Do not output only one intent type.
 Every query must remain explicitly tied to the overall research objective, not just the node title.
+- The query set must cover at least {min_required_uncovered_hits} uncovered chain steps in this round (if uncovered steps remain).
 Return a JSON list of strings only.
 """
         try:
@@ -872,21 +903,106 @@ Return a JSON list of strings only.
             parsed = json_repair.loads(response)
             if isinstance(parsed, list):
                 cleaned = [str(item).strip() for item in parsed if str(item).strip()]
-                return cleaned[: self.breadth]
+                cleaned = cleaned[: self.breadth]
+                self._record_chain_query_coverage(
+                    node=node,
+                    round_index=round_index,
+                    queries=cleaned,
+                    uncovered_step_ids=uncovered_step_ids,
+                    min_required_uncovered_hits=min_required_uncovered_hits,
+                    source="llm",
+                )
+                streak = self._node_chain_low_hit_streak.get(node.node_id, 0)
+                if streak >= 2 and uncovered_step_labels:
+                    return self._fallback_queries(node, missing_steps=uncovered_step_labels, reason="low_chain_hit")
+                return cleaned
         except Exception as exc:
             self.diagnostics["query_matrix_fallbacks"] += 1
             logger.warning(f"Query matrix fallback triggered: {exc}")
 
-        return self._fallback_queries(node)
+        return self._fallback_queries(node, missing_steps=uncovered_step_labels, reason="llm_error")
 
-    def _fallback_queries(self, node: TaskNode) -> list[str]:
+    def _record_chain_query_coverage(
+        self,
+        *,
+        node: TaskNode,
+        round_index: int,
+        queries: list[str],
+        uncovered_step_ids: list[str],
+        min_required_uncovered_hits: int,
+        source: str,
+    ) -> None:
+        coverage_all = assess_chain_coverage(queries or [], chain_steps=self.chain_steps)
+        covered_all_ids = set(coverage_all.get("covered_ids") or [])
+        self._covered_chain_step_ids.update(covered_all_ids)
+
+        target_steps = [step for step in self.chain_steps if str(step.get("id")) in set(uncovered_step_ids)]
+        if target_steps:
+            coverage_target = assess_chain_coverage(queries or [], chain_steps=target_steps)
+            covered_target_ids = set(coverage_target.get("covered_ids") or [])
+        else:
+            covered_target_ids = set()
+
+        target_hits = len(covered_target_ids)
+        if min_required_uncovered_hits > 0 and target_hits < min_required_uncovered_hits:
+            self._node_chain_low_hit_streak[node.node_id] = self._node_chain_low_hit_streak.get(node.node_id, 0) + 1
+        else:
+            self._node_chain_low_hit_streak[node.node_id] = 0
+
+        self.diagnostics["chain_step_query_coverage"].append(
+            {
+                "node_id": node.node_id,
+                "round": round_index,
+                "source": source,
+                "covered_chain_steps": sorted(list(covered_all_ids)),
+                "target_uncovered_hits": target_hits,
+                "required_uncovered_hits": min_required_uncovered_hits,
+                "low_hit_streak": self._node_chain_low_hit_streak.get(node.node_id, 0),
+                "query_count": len(queries or []),
+            }
+        )
+        self.diagnostics["chain_coverage_ratio"] = coverage_all.get("ratio", self.diagnostics.get("chain_coverage_ratio", 0.0))
+        self.diagnostics["chain_missing_steps"] = list(coverage_all.get("missing_labels") or [])
+        self.diagnostics["chain_missing_steps_count"] = len(coverage_all.get("missing_ids") or [])
+
+    def _fallback_queries(
+        self,
+        node: TaskNode,
+        missing_steps: list[str] | None = None,
+        reason: str = "fallback",
+    ) -> list[str]:
         topic = str(self.researcher.query or "").strip()
-        return [
+        base_queries = [
             f"{topic} macro trends and latest baseline updates",
             f"{topic} {node.title} stakeholder demand and benchmark comparison",
             f"{topic} {node.title} supply chain constraints cost capacity and compliance risks",
             f"{topic} {node.title} implementation cases milestones and decision gates",
-        ][: min(self.breadth, self.max_queries_per_round)]
+        ]
+        gap_queries: list[str] = []
+        for label in (missing_steps or [])[:4]:
+            gap_queries.append(f"{topic} {node.title} {label} evidence and latest data")
+            gap_queries.append(f"{topic} {label} benchmark and implementation case")
+
+        composed = gap_queries + base_queries
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for query in composed:
+            normalized = " ".join(query.lower().split())
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(query)
+
+        selected = deduped[: min(self.breadth, self.max_queries_per_round)]
+        self._record_chain_query_coverage(
+            node=node,
+            round_index=-1,
+            queries=selected,
+            uncovered_step_ids=[],
+            min_required_uncovered_hits=0,
+            source=f"fallback:{reason}",
+        )
+        return selected
 
     async def _extract_claims(
         self,

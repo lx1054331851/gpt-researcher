@@ -3,6 +3,13 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from gpt_researcher.actions.report_generation import (
+    _calculate_reference_url_ratio,
+    _check_explicit_chain_sections,
+    evaluate_goal_alignment,
+)
+from gpt_researcher.orchestration.coverage_lenses import assess_chain_coverage, resolve_chain_steps
+
 
 def _extract_topic(report: str) -> str:
     for line in report.splitlines():
@@ -67,6 +74,20 @@ def _score_report(report: str) -> dict[str, float]:
     }
 
 
+def _score_chain_alignment(report: str) -> dict[str, float | bool]:
+    topic = _extract_topic(report)
+    chain_steps = resolve_chain_steps(profile_mode="dual", industry_profile="auto", query=topic)
+    chain_cov = assess_chain_coverage([report], chain_steps=chain_steps)
+    section_check = _check_explicit_chain_sections(report)
+    goal_ok, _issues = evaluate_goal_alignment(report, topic)
+    return {
+        "chain_coverage_ratio": float(chain_cov.get("ratio", 0.0)),
+        "explicit_chain_sections_ok": bool(section_check.get("explicit_ok")),
+        "reference_url_ratio": float(_calculate_reference_url_ratio(report)),
+        "goal_alignment_ok": bool(goal_ok),
+    }
+
+
 def test_regression_compare_scores_for_sample_reports():
     current_report_path = Path("outputs/task_1772591891_584a607d8a.md")
     gemini_report_path = Path("data/gemini_final_report.md")
@@ -87,3 +108,25 @@ def test_regression_compare_scores_for_sample_reports():
         assert label in gemini_scores
         assert 0.0 <= current_scores[label] <= 10.0
         assert 0.0 <= gemini_scores[label] <= 10.0
+
+
+def test_regression_compare_chain_metrics_for_sample_reports():
+    current_report_path = Path("outputs/task_1772591891_584a607d8a.md")
+    gemini_report_path = Path("data/gemini_final_report.md")
+
+    if not current_report_path.exists() or not gemini_report_path.exists():
+        assert True
+        return
+
+    current_metrics = _score_chain_alignment(current_report_path.read_text(encoding="utf-8", errors="ignore"))
+    gemini_metrics = _score_chain_alignment(gemini_report_path.read_text(encoding="utf-8", errors="ignore"))
+
+    print("Current chain metrics:", current_metrics)
+    print("Gemini chain metrics:", gemini_metrics)
+
+    for key in ["chain_coverage_ratio", "reference_url_ratio"]:
+        assert 0.0 <= float(current_metrics[key]) <= 1.0
+        assert 0.0 <= float(gemini_metrics[key]) <= 1.0
+    for key in ["explicit_chain_sections_ok", "goal_alignment_ok"]:
+        assert isinstance(current_metrics[key], bool)
+        assert isinstance(gemini_metrics[key], bool)

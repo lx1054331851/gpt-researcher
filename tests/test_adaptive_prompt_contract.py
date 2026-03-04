@@ -49,6 +49,8 @@ def test_adaptive_report_prompt_mentions_coverage_and_gap_notes():
     assert "single lens" in lowered or "single dimension" in lowered
     assert "decision sheet" in lowered
     assert "macro context" in lowered and "execution roadmap" in lowered
+    assert "include explicit section headers" in lowered or "explicit chain sections" in lowered
+    assert "chain map: 行业→品牌→需求→材料→技术→落地" in prompt
     assert "reference hygiene rules" in lowered
 
 
@@ -76,6 +78,8 @@ def test_query_matrix_prompt_uses_cross_intent_sampling(monkeypatch):
     assert "counter-evidence" in text
     assert "economics and operational feasibility" in text
     assert "implementation examples and roadmap signals" in text
+    assert "currently uncovered chain steps" in text
+    assert "must cover at least" in text
 
 
 def test_dimension_planning_prompt_requires_orthogonal_coverage(monkeypatch):

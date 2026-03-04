@@ -381,3 +381,8 @@ def test_adaptive_trace_diagnostics_include_coverage_fields(monkeypatch):
     diagnostics = researcher.research_trace.get("diagnostics", {})
     assert "coverage_ratio" in diagnostics
     assert "coverage_missing_lenses_count" in diagnostics
+    assert "chain_coverage_ratio" in diagnostics
+    assert "chain_missing_steps_count" in diagnostics
+    assert "chain_missing_steps" in diagnostics
+    assert "chain_step_query_coverage" in diagnostics
+    assert isinstance(diagnostics["chain_step_query_coverage"], list)

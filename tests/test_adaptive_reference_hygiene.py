@@ -1,4 +1,7 @@
-from gpt_researcher.actions.report_generation import _sanitize_reference_hygiene
+from gpt_researcher.actions.report_generation import (
+    _calculate_reference_url_ratio,
+    _sanitize_reference_hygiene,
+)
 
 
 def test_reference_hygiene_rebuilds_markdown_links_and_removes_placeholders():
@@ -24,6 +27,7 @@ Another source is linked directly ([S1](https://example.com/s1)).
     assert "[example.com](https://example.com/s1)" in lowered
     assert meta["reference_url_count"] >= 3
     assert meta["reference_hygiene_changed"] is True
+    assert _calculate_reference_url_ratio(cleaned) >= 0.80
 
 
 def test_reference_hygiene_deduplicates_urls():
@@ -59,3 +63,4 @@ Evidence Log:
     assert "[www.oeko-tex.com](https://www.oeko-tex.com/en/)" in lowered
     assert "[www.uniqlo.com](https://www.uniqlo.com/us/en/contents/masterpiece/)" in lowered
     assert meta["reference_url_count"] >= 2
+    assert _calculate_reference_url_ratio(cleaned) >= 0.80
