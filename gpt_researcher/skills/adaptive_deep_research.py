@@ -11,7 +11,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import timedelta
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from typing import Any, Optional
 
 import json_repair
@@ -127,6 +127,21 @@ class AdaptiveDeepResearchSkill:
             for d in getattr(self.cfg, "adaptive_low_quality_domains", [])
             if str(d).strip()
         }
+        self.domain_hard_blocklist = {
+            str(d).lower().strip()
+            for d in getattr(self.cfg, "adaptive_domain_hard_blocklist", [])
+            if str(d).strip()
+        }
+        self.low_signal_url_patterns = [
+            re.compile(str(item), flags=re.IGNORECASE)
+            for item in getattr(self.cfg, "adaptive_low_signal_url_patterns", [])
+            if str(item).strip()
+        ]
+        self.low_signal_title_patterns = [
+            re.compile(str(item), flags=re.IGNORECASE)
+            for item in getattr(self.cfg, "adaptive_low_signal_title_patterns", [])
+            if str(item).strip()
+        ]
         self.entropy_min_gain = getattr(self.cfg, "entropy_min_gain", 0.08)
         self.saliency_threshold = getattr(self.cfg, "saliency_threshold", 0.72)
         self.default_tavily_depth = getattr(self.cfg, "tavily_search_depth_default", "basic")
@@ -158,6 +173,23 @@ class AdaptiveDeepResearchSkill:
             industry_profile=self.chain_industry_profile,
             query=str(getattr(self.researcher, "query", "") or ""),
         )
+        self.exploration_profile = str(
+            getattr(self.cfg, "adaptive_exploration_profile", "balanced") or "balanced"
+        ).strip().lower()
+        if self.exploration_profile not in {"balanced", "high_recall"}:
+            self.exploration_profile = "balanced"
+        self.min_unique_domains = max(1, int(getattr(self.cfg, "adaptive_min_unique_domains", 25)))
+        self.min_unique_urls = max(1, int(getattr(self.cfg, "adaptive_min_unique_urls", 45)))
+        self.frontier_query_ratio = max(
+            0.0,
+            min(1.0, float(getattr(self.cfg, "adaptive_frontier_query_ratio", 0.35))),
+        )
+        if self.exploration_profile == "high_recall":
+            self.max_queries_per_round = max(self.max_queries_per_round, 6)
+            self.max_rounds_per_node = max(self.max_rounds_per_node, 3)
+            self.max_sources_per_query = max(self.max_sources_per_query, 8)
+            self.breadth = max(self.breadth, self.max_queries_per_round)
+            self.tavily_advanced_enabled = True
 
         self.entropy_tracker = EntropyTracker(min_gain=self.entropy_min_gain, patience=2)
         self.saliency_detector = SaliencyDetector(self.saliency_threshold)
@@ -188,6 +220,19 @@ class AdaptiveDeepResearchSkill:
         self.node_failure_stats: dict[str, dict[str, int]] = {}
         self._node_chain_low_hit_streak: dict[str, int] = {}
         self._covered_chain_step_ids: set[str] = set()
+        self._query_track_map: dict[str, str] = {}
+        self._frontier_keyword_tokens: tuple[str, ...] = (
+            "frontier", "novel", "emerging", "new material", "biobased", "bio-based",
+            "nanofiber", "nano", "thermoregulation", "phase change", "pcm",
+            "waterless", "co2 dyeing", "supercritical", "refibra", "smart textile",
+            "cross-industry", "outdoor", "sportswear", "high-performance",
+            "前沿", "新材料", "新工艺", "纳米", "生物基", "智能温控", "无水染色",
+        )
+        self._unique_domains_seen: set[str] = set()
+        self._unique_urls_seen: set[str] = set()
+        self._frontier_query_signatures: set[str] = set()
+        self._frontier_hit_signatures: set[str] = set()
+        self._node_frontier_boost_used: set[str] = set()
         self.failed_domains: Counter[str] = Counter()
         self.blocked_domains: set[str] = set()
         self.claim_ledger: list[dict[str, Any]] = []
@@ -208,6 +253,13 @@ class AdaptiveDeepResearchSkill:
             "chain_missing_steps_count": 0,
             "chain_missing_steps": [],
             "chain_step_query_coverage": [],
+            "unique_domains_count": 0,
+            "unique_urls_count": 0,
+            "frontier_query_count": 0,
+            "frontier_hit_count": 0,
+            "frontier_boost_rounds": 0,
+            "low_signal_dropped_count": 0,
+            "retriever_mix": {},
         }
 
     async def run(self, on_progress=None) -> str:
@@ -291,6 +343,10 @@ class AdaptiveDeepResearchSkill:
         budget_snapshot["global_completed_queries"] = self.completed_queries
         self.trace.set_budget(budget_snapshot)
         self.diagnostics["blocked_domains"] = len(self.blocked_domains)
+        self.diagnostics["unique_domains_count"] = len(self._unique_domains_seen)
+        self.diagnostics["unique_urls_count"] = len(self._unique_urls_seen)
+        self.diagnostics["frontier_query_count"] = len(self._frontier_query_signatures)
+        self.diagnostics["frontier_hit_count"] = len(self._frontier_hit_signatures)
         self.trace.set_diagnostics(self.diagnostics.copy())
         self.claim_ledger = self._build_claim_ledger()
         failed_core_claims = [item for item in self.claim_ledger if not bool(item.get("policy_pass"))]
@@ -337,6 +393,7 @@ class AdaptiveDeepResearchSkill:
             node.node_id,
             {"search_failures": 0, "scrape_failures": 0},
         )
+        force_frontier_round = False
 
         while rounds < max_rounds:
             if deadline_ts is not None and time.time() >= deadline_ts:
@@ -347,7 +404,8 @@ class AdaptiveDeepResearchSkill:
                 )
                 break
             rounds += 1
-            queries = await self._generate_query_matrix(node, rounds)
+            queries = await self._generate_query_matrix(node, rounds, force_frontier=force_frontier_round)
+            force_frontier_round = False
             if not queries:
                 termination_reason = "no_queries"
                 break
@@ -456,6 +514,15 @@ class AdaptiveDeepResearchSkill:
                 termination_reason = "entropy_stop"
                 break
 
+            if (
+                rounds < max_rounds
+                and node.node_id not in self._node_frontier_boost_used
+                and self._should_frontier_boost()
+            ):
+                force_frontier_round = True
+                self._node_frontier_boost_used.add(node.node_id)
+                self.diagnostics["frontier_boost_rounds"] += 1
+
         self.learned_claims_by_node[node.node_id] = known_claims
         node.metadata["termination_reason"] = termination_reason
         node.metadata["executed_rounds"] = rounds
@@ -477,6 +544,11 @@ class AdaptiveDeepResearchSkill:
 
         context_text, urls = await self._collect_query_context(node, query)
         self.completed_queries += 1
+        query_key = self._normalize_query_signature(query)
+        query_track = self._query_track_map.get(query_key, "core")
+        if query_track == "frontier" and urls:
+            self._frontier_hit_signatures.add(query_key)
+            self.diagnostics["frontier_hit_count"] = len(self._frontier_hit_signatures)
 
         if not context_text.strip() or context_text.startswith("No high-quality context extracted"):
             return [], []
@@ -496,30 +568,68 @@ class AdaptiveDeepResearchSkill:
     async def _collect_query_context(self, node: TaskNode, query: str) -> tuple[str, list[str]]:
         has_conflict_pressure = bool(self.research_journal["contradictions"])
         search_depth = self._resolve_search_depth(node, has_conflict_pressure)
-
-        retriever = self.researcher.retrievers[0]
+        retrievers = list(getattr(self.researcher, "retrievers", []) or [])
+        if not retrievers:
+            return f"No high-quality context extracted for query: {query}", []
         original_headers = self.researcher.headers
         self.researcher.headers = dict(self.researcher.headers or {})
         self.researcher.headers["tavily_search_depth"] = search_depth
         if search_depth == "advanced":
             self.researcher.headers["tavily_include_raw_content"] = "true"
 
-        cache_key = (query.strip().lower(), search_depth)
+        cache_key = (query.strip().lower(), search_depth, self.exploration_profile)
         search_results: list[dict[str, Any]] = []
         if self.cache_enabled and cache_key in self.search_cache:
             search_results = list(self.search_cache[cache_key])
 
         try:
             if not search_results:
-                search_results = await asyncio.wait_for(
-                    get_search_results(
-                        query=query,
-                        retriever=retriever,
-                        query_domains=self.researcher.query_domains,
-                        researcher=self.researcher,
-                    ),
-                    timeout=self.search_timeout_seconds,
+                per_retriever_quota = self._resolve_retriever_quota(len(retrievers))
+
+                async def _search_with_retriever(retriever_callable):
+                    retriever_name = getattr(retriever_callable, "__name__", str(retriever_callable))
+                    try:
+                        results = await asyncio.wait_for(
+                            get_search_results(
+                                query=query,
+                                retriever=retriever_callable,
+                                query_domains=self.researcher.query_domains,
+                                researcher=self.researcher,
+                            ),
+                            timeout=self.search_timeout_seconds,
+                        )
+                        if not isinstance(results, list):
+                            return [], retriever_name
+                        trimmed = results[:per_retriever_quota]
+                        mix = dict(self.diagnostics.get("retriever_mix") or {})
+                        mix[retriever_name] = int(mix.get(retriever_name, 0)) + len(trimmed)
+                        self.diagnostics["retriever_mix"] = mix
+                        return trimmed, retriever_name
+                    except Exception as exc:
+                        self.diagnostics["search_failures"] += 1
+                        node_stats = self.node_failure_stats.setdefault(
+                            node.node_id,
+                            {"search_failures": 0, "scrape_failures": 0},
+                        )
+                        node_stats["search_failures"] += 1
+                        if isinstance(exc, asyncio.TimeoutError):
+                            self._node_runtime_flags.setdefault(node.node_id, set()).add("timeout")
+                        logger.warning(f"Search failed for query '{query}' via {retriever_name}: {exc}")
+                        return [], retriever_name
+
+                raw_batches = await asyncio.gather(
+                    *[_search_with_retriever(retriever_item) for retriever_item in retrievers],
+                    return_exceptions=False,
                 )
+                merged_results: list[dict[str, Any]] = []
+                for batch, retriever_name in raw_batches:
+                    for item in batch:
+                        if not isinstance(item, dict):
+                            continue
+                        enriched = dict(item)
+                        enriched["_retriever"] = retriever_name
+                        merged_results.append(enriched)
+                search_results = self._dedupe_search_results_by_canonical(merged_results)
         except Exception as exc:
             self.diagnostics["search_failures"] += 1
             node_stats = self.node_failure_stats.setdefault(
@@ -551,6 +661,13 @@ class AdaptiveDeepResearchSkill:
             if url:
                 urls.append(url)
                 self.researcher.visited_urls.add(url)
+                canonical_url = self._canonicalize_url(str(url))
+                if canonical_url:
+                    self._unique_urls_seen.add(canonical_url)
+                if domain:
+                    self._unique_domains_seen.add(domain)
+                self.diagnostics["unique_domains_count"] = len(self._unique_domains_seen)
+                self.diagnostics["unique_urls_count"] = len(self._unique_urls_seen)
             if body:
                 context_chunks.append(str(body))
             if url and body:
@@ -622,11 +739,94 @@ class AdaptiveDeepResearchSkill:
         return compact_context, urls
 
     def _resolve_search_depth(self, node: TaskNode, has_conflict: bool) -> str:
+        if self.exploration_profile == "high_recall":
+            if node.stage in {TaskStage.FOUNDATION, TaskStage.EVIDENCE}:
+                return "advanced"
         if not self.tavily_advanced_enabled:
             return self.default_tavily_depth
         if has_conflict or node.uncertainty >= 0.65:
             return "advanced"
         return self.default_tavily_depth
+
+    def _resolve_retriever_quota(self, retriever_count: int) -> int:
+        if retriever_count <= 0:
+            return self.max_sources_per_query
+        target_pool = max(self.max_sources_per_query * 2, retriever_count * 2)
+        return max(2, math.ceil(target_pool / retriever_count))
+
+    @staticmethod
+    def _normalize_query_signature(query: str) -> str:
+        return " ".join(str(query or "").lower().split())
+
+    def _should_frontier_boost(self) -> bool:
+        if self.exploration_profile != "high_recall":
+            return False
+        if self.diagnostics.get("unique_domains_count", 0) < self.min_unique_domains:
+            return True
+        return self.diagnostics.get("frontier_hit_count", 0) < max(2, math.ceil(self.completed_queries * 0.35))
+
+    @staticmethod
+    def _canonicalize_url(url: str) -> str:
+        raw = str(url or "").strip()
+        if not raw:
+            return ""
+        try:
+            parsed = urlparse(raw)
+            scheme = parsed.scheme.lower() or "https"
+            netloc = parsed.netloc.lower()
+            if netloc.startswith("www."):
+                netloc = netloc[4:]
+            path = parsed.path or "/"
+            if path != "/" and path.endswith("/"):
+                path = path[:-1]
+            filtered_query = [
+                (k, v)
+                for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+                if not k.lower().startswith("utm_")
+                and k.lower() not in {"fbclid", "gclid", "ref", "source"}
+            ]
+            normalized_query = urlencode(filtered_query, doseq=True)
+            return urlunparse((scheme, netloc, path, "", normalized_query, ""))
+        except Exception:
+            return raw
+
+    def _canonical_result_key(self, result: dict[str, Any]) -> tuple[str, str]:
+        url = str(result.get("href") or result.get("url") or "").strip()
+        title = str(result.get("title") or "").strip().lower()
+        canonical_url = self._canonicalize_url(url)
+        if canonical_url:
+            return canonical_url, title
+        body = str(result.get("body") or result.get("content") or "")[:120].lower()
+        fallback = hashlib.sha1(f"{title}|{body}".encode("utf-8")).hexdigest()
+        return fallback, title
+
+    def _dedupe_search_results_by_canonical(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        deduped: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            key = self._canonical_result_key(result)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(result)
+        return deduped
+
+    def _is_low_signal_source(self, url: str, title: str) -> bool:
+        domain = self._domain_from_url(url)
+        if domain.startswith("www."):
+            domain = domain[4:]
+        if domain and any(domain == item or domain.endswith(f".{item}") for item in self.domain_hard_blocklist):
+            return True
+
+        url_text = str(url or "").lower()
+        title_text = str(title or "").lower()
+        if any(pattern.search(url_text) for pattern in self.low_signal_url_patterns):
+            return True
+        if any(pattern.search(title_text) for pattern in self.low_signal_title_patterns):
+            return True
+        return False
 
     def _can_early_stop(self, graph) -> bool:
         completed_nodes = [
@@ -679,9 +879,28 @@ class AdaptiveDeepResearchSkill:
         if any(k in body[:1200] for k in ("revenue", "gross margin", "operating margin", "guidance")):
             score += 0.4
 
+        technical_signal_keywords = (
+            "white paper", "technical note", "material datasheet", "specification",
+            "patent", "peer-reviewed", "journal", "conference", "lca", "life cycle",
+            "case study", "pilot", "proof of concept", "fabric technology",
+            "paper", "doi", "materials science",
+        )
+        if any(k in title for k in technical_signal_keywords):
+            score += 1.0
+        if any(k in body[:1800] for k in technical_signal_keywords):
+            score += 0.6
+
         noise_keywords = ("shopping", "coupon", "affiliate", "sponsored")
         if any(k in body[:800] for k in noise_keywords):
             score -= 0.8
+        low_signal_keywords = (
+            "word frequency", "frequency list", "dictionary", "glossary", "lexicon",
+            "词频", "词表", "字典", "语料", "字库",
+        )
+        if any(k in title for k in low_signal_keywords):
+            score -= 2.5
+        if any(k in body[:1200] for k in low_signal_keywords):
+            score -= 1.5
         if body and len(body) < 100:
             score -= 0.5
         return score
@@ -693,19 +912,36 @@ class AdaptiveDeepResearchSkill:
             return search_results[: self.max_sources_per_query]
 
         scored: list[tuple[float, dict[str, Any]]] = []
+        seen_keys: set[tuple[str, str]] = set()
         for result in search_results:
             url = str(result.get("href") or result.get("url") or "").strip()
+            title = str(result.get("title") or "").strip()
             domain = self._domain_from_url(url)
             if domain and domain in self.blocked_domains:
                 continue
+            if self._is_low_signal_source(url, title):
+                self.diagnostics["low_signal_dropped_count"] += 1
+                continue
+            key = self._canonical_result_key(result)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
             score = self._score_source(result)
             if score < self.min_source_quality_score:
                 continue
             scored.append((score, result))
 
         if not scored:
-            # If all got filtered out, keep original top results to avoid dead branch.
-            return search_results[: self.max_sources_per_query]
+            # Keep hard-filter guarantees for low-signal sources even in fallback mode.
+            fallback_cleaned = [
+                item
+                for item in search_results
+                if not self._is_low_signal_source(
+                    str(item.get("href") or item.get("url") or ""),
+                    str(item.get("title") or ""),
+                )
+            ]
+            return fallback_cleaned[: self.max_sources_per_query]
 
         scored.sort(key=lambda item: item[0], reverse=True)
 
@@ -784,7 +1020,14 @@ class AdaptiveDeepResearchSkill:
 
         if filtered:
             return filtered[: self.max_sources_per_query]
-        return fallback_results[: self.max_sources_per_query]
+        cleaned_fallback = [
+            item for item in fallback_results
+            if not self._is_low_signal_source(
+                str(item.get("href") or item.get("url") or ""),
+                str(item.get("title") or ""),
+            )
+        ]
+        return cleaned_fallback[: self.max_sources_per_query]
 
     async def _plan_dimensions(self, query: str) -> list[str]:
         if self.locked_outline and isinstance(self.locked_outline, dict):
@@ -858,17 +1101,28 @@ Requirements:
         ]
         return fallback_dimensions[: self.max_dimensions]
 
-    async def _generate_query_matrix(self, node: TaskNode, round_index: int) -> list[str]:
+    async def _generate_query_matrix(
+        self,
+        node: TaskNode,
+        round_index: int,
+        force_frontier: bool = False,
+    ) -> list[str]:
         uncovered_steps = [step for step in self.chain_steps if str(step.get("id")) not in self._covered_chain_step_ids]
         uncovered_step_ids = [str(step.get("id")) for step in uncovered_steps if str(step.get("id"))]
         uncovered_step_labels = [str(step.get("label")) for step in uncovered_steps if str(step.get("label"))]
         min_required_uncovered_hits = min(3, len(uncovered_steps))
+        max_query_count = min(self.breadth, self.max_queries_per_round)
+        required_frontier_queries = max(
+            1,
+            math.ceil(max_query_count * self.frontier_query_ratio),
+        )
         prompt = f"""
-Generate up to {self.breadth} search queries for this research node.
+Generate up to {max_query_count} search queries for this research node.
 Node: {node.title}
 Description: {node.description}
 Round: {round_index}
 Overall research objective: {self.researcher.query}
+Frontier mode: {"ON" if force_frontier else "OFF"}
 
 Use mixed query intents across:
 - factual baseline and definitions
@@ -886,6 +1140,9 @@ Currently uncovered chain steps:
 Do not output only one intent type.
 Every query must remain explicitly tied to the overall research objective, not just the node title.
 - The query set must cover at least {min_required_uncovered_hits} uncovered chain steps in this round (if uncovered steps remain).
+- Include at least {required_frontier_queries} frontier-expansion queries focused on:
+  emerging materials, novel process technologies, cross-industry transfer, and future-ready pathways.
+- Prefix each query with [core] or [frontier].
 Return a JSON list of strings only.
 """
         try:
@@ -902,8 +1159,23 @@ Return a JSON list of strings only.
             )
             parsed = json_repair.loads(response)
             if isinstance(parsed, list):
-                cleaned = [str(item).strip() for item in parsed if str(item).strip()]
-                cleaned = cleaned[: self.breadth]
+                parsed_queries = [str(item).strip() for item in parsed if str(item).strip()]
+                cleaned: list[str] = []
+                track_map: dict[str, str] = {}
+                for item in parsed_queries:
+                    normalized_query, track = self._parse_query_track(item)
+                    if not normalized_query:
+                        continue
+                    cleaned.append(normalized_query)
+                    track_map[self._normalize_query_signature(normalized_query)] = track
+                cleaned = self._inject_frontier_queries(
+                    node=node,
+                    queries=cleaned[:max_query_count],
+                    track_map=track_map,
+                    required_frontier_queries=required_frontier_queries,
+                    force_frontier=force_frontier,
+                )
+                self._register_query_tracks(queries=cleaned, track_map=track_map)
                 self._record_chain_query_coverage(
                     node=node,
                     round_index=round_index,
@@ -914,13 +1186,99 @@ Return a JSON list of strings only.
                 )
                 streak = self._node_chain_low_hit_streak.get(node.node_id, 0)
                 if streak >= 2 and uncovered_step_labels:
-                    return self._fallback_queries(node, missing_steps=uncovered_step_labels, reason="low_chain_hit")
+                    return self._fallback_queries(
+                        node,
+                        missing_steps=uncovered_step_labels,
+                        reason="low_chain_hit",
+                        force_frontier=force_frontier,
+                    )
                 return cleaned
         except Exception as exc:
             self.diagnostics["query_matrix_fallbacks"] += 1
             logger.warning(f"Query matrix fallback triggered: {exc}")
 
-        return self._fallback_queries(node, missing_steps=uncovered_step_labels, reason="llm_error")
+        return self._fallback_queries(
+            node,
+            missing_steps=uncovered_step_labels,
+            reason="llm_error",
+            force_frontier=force_frontier,
+        )
+
+    def _parse_query_track(self, query: str) -> tuple[str, str]:
+        raw = str(query or "").strip()
+        if not raw:
+            return "", "core"
+        tagged = re.match(r"^\[(core|frontier)\]\s*(.+)$", raw, flags=re.IGNORECASE)
+        if tagged:
+            track = tagged.group(1).strip().lower()
+            cleaned = tagged.group(2).strip()
+            return cleaned, track
+        return raw, ("frontier" if self._is_frontier_query(raw) else "core")
+
+    def _is_frontier_query(self, query: str) -> bool:
+        text = str(query or "").lower()
+        return any(token in text for token in self._frontier_keyword_tokens)
+
+    def _build_frontier_seed_queries(self, node: TaskNode, limit: int = 3) -> list[str]:
+        topic = str(self.researcher.query or "").strip()
+        node_title = str(node.title or "").strip()
+        seeds = [
+            f"{topic} {node_title} emerging materials and next-generation fibers",
+            f"{topic} {node_title} novel process technology and pilot case studies",
+            f"{topic} {node_title} cross-industry transfer from sportswear and outdoor textiles",
+            f"{topic} {node_title} biobased and nanomaterial pathways for 2027",
+            f"{topic} {node_title} thermoregulation and smart textile technology options",
+        ]
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for item in seeds:
+            norm = self._normalize_query_signature(item)
+            if not norm or norm in seen:
+                continue
+            seen.add(norm)
+            deduped.append(item)
+        return deduped[:limit]
+
+    def _inject_frontier_queries(
+        self,
+        *,
+        node: TaskNode,
+        queries: list[str],
+        track_map: dict[str, str],
+        required_frontier_queries: int,
+        force_frontier: bool,
+    ) -> list[str]:
+        frontier_count = sum(
+            1 for query in queries
+            if track_map.get(self._normalize_query_signature(query), "core") == "frontier"
+        )
+        need = max(0, required_frontier_queries - frontier_count)
+        if force_frontier:
+            need = max(need, max(1, required_frontier_queries))
+        if need <= 0:
+            return queries
+
+        additions = self._build_frontier_seed_queries(node=node, limit=need + 2)
+        existing_keys = {self._normalize_query_signature(item) for item in queries}
+        for candidate in additions:
+            norm = self._normalize_query_signature(candidate)
+            if norm in existing_keys:
+                continue
+            queries.append(candidate)
+            existing_keys.add(norm)
+            track_map[norm] = "frontier"
+            if len(queries) >= min(self.breadth, self.max_queries_per_round):
+                break
+        return queries[: min(self.breadth, self.max_queries_per_round)]
+
+    def _register_query_tracks(self, *, queries: list[str], track_map: dict[str, str]) -> None:
+        for query in queries:
+            key = self._normalize_query_signature(query)
+            track = track_map.get(key, ("frontier" if self._is_frontier_query(query) else "core"))
+            self._query_track_map[key] = track
+            if track == "frontier":
+                self._frontier_query_signatures.add(key)
+        self.diagnostics["frontier_query_count"] = len(self._frontier_query_signatures)
 
     def _record_chain_query_coverage(
         self,
@@ -970,6 +1328,7 @@ Return a JSON list of strings only.
         node: TaskNode,
         missing_steps: list[str] | None = None,
         reason: str = "fallback",
+        force_frontier: bool = False,
     ) -> list[str]:
         topic = str(self.researcher.query or "").strip()
         base_queries = [
@@ -978,12 +1337,13 @@ Return a JSON list of strings only.
             f"{topic} {node.title} supply chain constraints cost capacity and compliance risks",
             f"{topic} {node.title} implementation cases milestones and decision gates",
         ]
+        frontier_queries = self._build_frontier_seed_queries(node=node, limit=4)
         gap_queries: list[str] = []
         for label in (missing_steps or [])[:4]:
             gap_queries.append(f"{topic} {node.title} {label} evidence and latest data")
             gap_queries.append(f"{topic} {label} benchmark and implementation case")
 
-        composed = gap_queries + base_queries
+        composed = gap_queries + (frontier_queries if force_frontier else []) + base_queries
         deduped: list[str] = []
         seen: set[str] = set()
         for query in composed:
@@ -994,6 +1354,11 @@ Return a JSON list of strings only.
             deduped.append(query)
 
         selected = deduped[: min(self.breadth, self.max_queries_per_round)]
+        track_map: dict[str, str] = {}
+        for query in selected:
+            key = self._normalize_query_signature(query)
+            track_map[key] = "frontier" if (force_frontier or self._is_frontier_query(query)) else "core"
+        self._register_query_tracks(queries=selected, track_map=track_map)
         self._record_chain_query_coverage(
             node=node,
             round_index=-1,
@@ -1314,6 +1679,19 @@ Return JSON list with:
                     f"- {claim} | {url} | {anchor.get('anchor_hash', '')}"
                 )
 
+        frontier_section = ["## Frontier Signals"]
+        frontier_section.append(f"- Unique domains covered: {self.diagnostics.get('unique_domains_count', 0)}")
+        frontier_section.append(f"- Unique URLs covered: {self.diagnostics.get('unique_urls_count', 0)}")
+        frontier_section.append(f"- Frontier queries executed: {self.diagnostics.get('frontier_query_count', 0)}")
+        frontier_section.append(f"- Frontier queries with evidence hits: {self.diagnostics.get('frontier_hit_count', 0)}")
+        frontier_section.append(f"- Low-signal sources dropped: {self.diagnostics.get('low_signal_dropped_count', 0)}")
+        retriever_mix = self.diagnostics.get("retriever_mix") or {}
+        if isinstance(retriever_mix, dict) and retriever_mix:
+            ordered_mix = sorted(retriever_mix.items(), key=lambda item: item[1], reverse=True)
+            frontier_section.append("- Retriever mix:")
+            for retriever_name, count in ordered_mix[:10]:
+                frontier_section.append(f"  - {retriever_name}: {count}")
+
         budget_snapshot = self.budget_manager.export()
         budget_snapshot["global_completed_queries"] = self.completed_queries
         self.trace.set_budget(budget_snapshot)
@@ -1322,6 +1700,7 @@ Return JSON list with:
             "\n".join(contradiction_section),
             "\n".join(pending_section),
             "\n".join(citation_section),
+            "\n".join(frontier_section),
         ]
 
     def _estimate_quality_score(self) -> float:

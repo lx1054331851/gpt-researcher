@@ -583,6 +583,12 @@ Required output behavior:
   - state which coverage lenses are addressed,
   - identify missing lenses (if any),
   - give reasons and concrete follow-up evidence actions for those gaps.
+- Include a dedicated "Frontier Radar" subsection for high-upside candidates:
+  - each item must include: material/technology name, mechanism, evidence maturity (T1/T2/T3),
+    2027 landing window (Near/Mid/Far), key blocker (cost/capacity/compliance), and next experiment.
+- Use dual-track synthesis:
+  - Execution Track: near-term, decision-ready, operationally feasible actions.
+  - Frontier Track: evidence-grounded exploratory bets that can inspire next-wave options.
 - Use in-text citations in {report_format} with markdown links, e.g. ([in-text citation](url)).
 - Reference hygiene rules:
   - every reference line must include one valid markdown URL,

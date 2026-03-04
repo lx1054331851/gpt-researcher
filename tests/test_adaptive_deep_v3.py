@@ -386,3 +386,8 @@ def test_adaptive_trace_diagnostics_include_coverage_fields(monkeypatch):
     assert "chain_missing_steps" in diagnostics
     assert "chain_step_query_coverage" in diagnostics
     assert isinstance(diagnostics["chain_step_query_coverage"], list)
+    assert "unique_domains_count" in diagnostics
+    assert "unique_urls_count" in diagnostics
+    assert "frontier_query_count" in diagnostics
+    assert "frontier_hit_count" in diagnostics
+    assert "retriever_mix" in diagnostics

@@ -51,6 +51,9 @@ def test_adaptive_report_prompt_mentions_coverage_and_gap_notes():
     assert "macro context" in lowered and "execution roadmap" in lowered
     assert "include explicit section headers" in lowered or "explicit chain sections" in lowered
     assert "chain map: 行业→品牌→需求→材料→技术→落地" in prompt
+    assert "frontier radar" in lowered
+    assert "evidence maturity (t1/t2/t3)" in lowered
+    assert "execution track" in lowered and "frontier track" in lowered
     assert "reference hygiene rules" in lowered
 
 

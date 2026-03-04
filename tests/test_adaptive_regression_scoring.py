@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 from gpt_researcher.actions.report_generation import (
     _calculate_reference_url_ratio,
@@ -64,6 +65,53 @@ def _score_evidence_quality(report: str) -> float:
     return round(min(10.0, score), 2)
 
 
+def _extract_urls(report: str) -> list[str]:
+    return re.findall(r"https?://[^\s)>\]]+", report)
+
+
+def _extract_unique_domains(report: str) -> set[str]:
+    domains: set[str] = set()
+    for url in _extract_urls(report):
+        try:
+            domain = (urlparse(url).netloc or "").lower()
+        except Exception:
+            domain = ""
+        if not domain:
+            continue
+        if domain.startswith("www."):
+            domain = domain[4:]
+        domains.add(domain)
+    return domains
+
+
+def _count_frontier_items(report: str) -> int:
+    lines = report.splitlines()
+    start = -1
+    for idx, line in enumerate(lines):
+        if "frontier radar" in line.lower():
+            start = idx
+            break
+    if start < 0:
+        return 0
+    count = 0
+    for line in lines[start + 1 :]:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            break
+        if stripped.startswith(("-", "*", "1.", "2.", "3.")):
+            count += 1
+    return count
+
+
+def _count_low_signal_domains(report: str) -> int:
+    low_signal_tokens = ("wordfreq", "dictionary", "glossary", "lexicon", "wordlist")
+    return sum(
+        1
+        for domain in _extract_unique_domains(report)
+        if any(token in domain for token in low_signal_tokens)
+    )
+
+
 def _score_report(report: str) -> dict[str, float]:
     topic = _extract_topic(report)
     return {
@@ -85,6 +133,10 @@ def _score_chain_alignment(report: str) -> dict[str, float | bool]:
         "explicit_chain_sections_ok": bool(section_check.get("explicit_ok")),
         "reference_url_ratio": float(_calculate_reference_url_ratio(report)),
         "goal_alignment_ok": bool(goal_ok),
+        "unique_domains_count": len(_extract_unique_domains(report)),
+        "unique_urls_count": len(set(_extract_urls(report))),
+        "frontier_item_count": _count_frontier_items(report),
+        "low_signal_domain_count": _count_low_signal_domains(report),
     }
 
 
@@ -130,3 +182,7 @@ def test_regression_compare_chain_metrics_for_sample_reports():
     for key in ["explicit_chain_sections_ok", "goal_alignment_ok"]:
         assert isinstance(current_metrics[key], bool)
         assert isinstance(gemini_metrics[key], bool)
+    for key in ["unique_domains_count", "unique_urls_count", "frontier_item_count", "low_signal_domain_count"]:
+        assert int(current_metrics[key]) >= 0
+        assert int(gemini_metrics[key]) >= 0
+    assert int(current_metrics["low_signal_domain_count"]) == 0

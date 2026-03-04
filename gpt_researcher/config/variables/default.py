@@ -89,6 +89,29 @@ DEFAULT_CONFIG: BaseConfig = {
     "ADAPTIVE_CHAIN_INDUSTRY_PROFILE": "auto",  # auto|apparel_supply_chain|generic
     "ADAPTIVE_CHAIN_PATCH_MAX_ROUNDS": 1,
     "ADAPTIVE_REFERENCE_URL_MIN_RATIO": 0.80,
+    "ADAPTIVE_EXPLORATION_PROFILE": "high_recall",  # balanced|high_recall
+    "ADAPTIVE_MIN_UNIQUE_DOMAINS": 25,
+    "ADAPTIVE_MIN_UNIQUE_URLS": 45,
+    "ADAPTIVE_FRONTIER_QUERY_RATIO": 0.35,
+    "ADAPTIVE_DOMAIN_HARD_BLOCKLIST": [
+        "plecoforums.com",
+    ],
+    "ADAPTIVE_LOW_SIGNAL_URL_PATTERNS": [
+        r"wordfreq",
+        r"dictionary",
+        r"glossary",
+        r"wordlist",
+        r"corpus.*txt",
+        r"dict_.*\\.txt",
+        r"technology_wordfreq",
+    ],
+    "ADAPTIVE_LOW_SIGNAL_TITLE_PATTERNS": [
+        r"词频",
+        r"词表",
+        r"字典",
+        r"lexicon",
+        r"frequency list",
+    ],
     "ENTROPY_MIN_GAIN": 0.08,
     "SALIENCY_THRESHOLD": 0.72,
     "RABBIT_HOLE_MAX_BRANCHES": 2,
