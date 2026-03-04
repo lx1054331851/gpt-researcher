@@ -37,6 +37,7 @@
     "reportType": {
       "summary": "摘要报告",
       "deep": "深度研究",
+      "adaptiveDeep": "自适应深度研究",
       "multiAgents": "多智能体",
       "detailed": "详细报告"
     },

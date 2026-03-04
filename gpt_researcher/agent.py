@@ -24,6 +24,7 @@ from .prompts import get_prompt_family
 from .skills.browser import BrowserManager
 from .skills.context_manager import ContextManager
 from .skills.curator import SourceCurator
+from .skills.adaptive_deep_research import AdaptiveDeepResearchSkill
 from .skills.deep_research import DeepResearchSkill
 from .skills.image_generator import ImageGenerator
 from .skills.researcher import ResearchConductor
@@ -79,6 +80,10 @@ class GPTResearcher:
         mcp_max_iterations: int | None = None,
         mcp_strategy: str | None = None,
         language: str | None = None,
+        research_outline: dict[str, Any] | None = None,
+        report_blueprint: dict[str, Any] | None = None,
+        outline_locked: bool = False,
+        user_requirements: str | None = None,
         **kwargs
     ):
         """
@@ -166,6 +171,10 @@ class GPTResearcher:
         self.research_costs = 0.0
         self.log_handler = log_handler
         self.prompt_family = get_prompt_family(prompt_family or self.cfg.prompt_family, self.cfg)
+        self.research_outline = research_outline
+        self.report_blueprint = report_blueprint
+        self.outline_locked = bool(outline_locked)
+        self.user_requirements = user_requirements
         
         # Process MCP configurations if provided
         self.mcp_configs = mcp_configs
@@ -188,8 +197,12 @@ class GPTResearcher:
         self.scraper_manager: BrowserManager = BrowserManager(self)
         self.source_curator: SourceCurator = SourceCurator(self)
         self.deep_researcher: Optional[DeepResearchSkill] = None
+        self.adaptive_deep_researcher: Optional[AdaptiveDeepResearchSkill] = None
+        self.research_trace: dict = {}
         if report_type == ReportType.DeepResearch.value:
             self.deep_researcher = DeepResearchSkill(self)
+        elif report_type == ReportType.AdaptiveDeepResearch.value:
+            self.adaptive_deep_researcher = AdaptiveDeepResearchSkill(self)
 
         # Initialize image generator (optional - only if configured)
         self.image_generator: Optional[ImageGenerator] = ImageGenerator(self)
@@ -350,6 +363,8 @@ class GPTResearcher:
         # Handle deep research separately
         if self.report_type == ReportType.DeepResearch.value and self.deep_researcher:
             return await self._handle_deep_research(on_progress)
+        if self.report_type == ReportType.AdaptiveDeepResearch.value and self.adaptive_deep_researcher:
+            return await self._handle_adaptive_deep_research(on_progress)
 
         if not (self.agent and self.role):
             await self._log_event("action", action="choose_agent")
@@ -443,6 +458,28 @@ class GPTResearcher:
         })
 
         # Return the research context
+        return self.context
+
+    async def _handle_adaptive_deep_research(self, on_progress=None):
+        """Handle adaptive deep research execution and logging."""
+        await self._log_event("research", step="adaptive_deep_research_initialize", details={
+            "type": "adaptive_deep_research",
+            "breadth": self.adaptive_deep_researcher.breadth,
+            "max_depth": self.adaptive_deep_researcher.max_depth,
+            "concurrency": self.adaptive_deep_researcher.concurrency_limit,
+        })
+
+        self.context = await self.adaptive_deep_researcher.run(on_progress=on_progress)
+        if hasattr(self, "research_trace"):
+            self.research_trace = getattr(self, "research_trace", {})
+        if hasattr(self.adaptive_deep_researcher, "trace"):
+            self.research_trace = self.adaptive_deep_researcher.trace.to_dict()
+
+        await self._log_event("research", step="adaptive_deep_research_complete", details={
+            "context_length": len(self.context),
+            "visited_urls": len(self.visited_urls),
+            "trace_nodes": len(self.research_trace.get("planner", {}).get("nodes", [])),
+        })
         return self.context
 
     async def write_report(
@@ -694,6 +731,10 @@ class GPTResearcher:
             Total cost in USD.
         """
         return self.research_costs
+
+    def get_research_trace(self) -> dict:
+        """Get adaptive deep research trace data if available."""
+        return self.research_trace
 
     def set_verbose(self, verbose: bool) -> None:
         """Set the verbose output mode.

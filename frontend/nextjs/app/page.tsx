@@ -7,7 +7,16 @@ import { useResearchHistoryContext } from '@/hooks/ResearchHistoryContext';
 import { useScrollHandler } from '@/hooks/useScrollHandler';
 import { startLanggraphResearch } from '../components/Langgraph/Langgraph';
 import findDifferences from '../helpers/findDifferences';
-import { Data, ChatBoxSettings, QuestionData, ChatMessage, ChatData } from '../types/data';
+import {
+  AdaptiveResearchStage,
+  ChatBoxSettings,
+  ChatData,
+  ChatMessage,
+  Data,
+  OutlineDraftData,
+  OutlineUpdatedData,
+  QuestionData,
+} from '../types/data';
 import { preprocessOrderedData } from '../utils/dataProcessing';
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from 'uuid';
@@ -58,6 +67,8 @@ export default function Home() {
   const [questionForHuman, setQuestionForHuman] = useState<true | false>(false);
   const [allLogs, setAllLogs] = useState<any[]>([]);
   const [isStopped, setIsStopped] = useState(false);
+  const [adaptiveStage, setAdaptiveStage] = useState<AdaptiveResearchStage>('idle');
+  const [latestOutlineData, setLatestOutlineData] = useState<OutlineDraftData | OutlineUpdatedData | null>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentResearchId, setCurrentResearchId] = useState<string | null>(null);
@@ -99,17 +110,57 @@ export default function Home() {
     setAnswer,
     setLoading,
     setShowHumanFeedback,
-    setQuestionForHuman
+    setQuestionForHuman,
+    {
+      onOutlineDraft: (data) => {
+        setLatestOutlineData(data);
+        setAdaptiveStage('await_outline_approval');
+      },
+      onOutlineUpdated: (data) => {
+        setLatestOutlineData(data);
+        setAdaptiveStage('await_outline_approval');
+      },
+    }
   ));
   
   // Use the reference to access websocket functions
-  const { socket, initializeWebSocket } = websocketRef.current;
+  const { socket, initializeWebSocket, revisePlan, executePlan } = websocketRef.current;
 
   const handleFeedbackSubmit = (feedback: string | null) => {
     if (socket) {
       socket.send(JSON.stringify({ type: 'human_feedback', content: feedback }));
     }
     setShowHumanFeedback(false);
+  };
+
+  const handleApproveOutlineExecute = () => {
+    if (!latestOutlineData) return;
+    setAdaptiveStage('executing');
+    executePlan({
+      outline_id: latestOutlineData.outline_id,
+      approved_outline: latestOutlineData.outline,
+      report_blueprint: latestOutlineData.report_blueprint,
+    });
+  };
+
+  const handleManualOutlineExecute = (manualOutline: any, manualBlueprint: any) => {
+    if (!latestOutlineData) return;
+    setAdaptiveStage('executing');
+    executePlan({
+      outline_id: latestOutlineData.outline_id,
+      approved_outline: manualOutline,
+      report_blueprint: manualBlueprint,
+    });
+  };
+
+  const handleAiRewriteOutline = (instruction: string) => {
+    if (!latestOutlineData) return;
+    setAdaptiveStage('planning');
+    revisePlan({
+      outline_id: latestOutlineData.outline_id,
+      mode: 'ai_rewrite',
+      instruction,
+    });
   };
 
   const handleChat = async (message: string) => {
@@ -318,6 +369,8 @@ export default function Home() {
     setPromptValue("");
     setAnswer("");
     setCurrentResearchId(null); // Reset current research ID for new research
+    setLatestOutlineData(null);
+    setAdaptiveStage(chatBoxSettings.report_type === 'adaptive_deep' ? 'planning' : 'executing');
     setOrderedData((prevOrder) => [...prevOrder, { type: 'question', content: newQuestion }]);
 
     // For mobile, use a simplified approach without websockets
@@ -649,6 +702,8 @@ export default function Home() {
     setIsInChatMode(false);
     setCurrentResearchId(null); // Reset research ID
     setIsProcessingChat(false);
+    setAdaptiveStage('idle');
+    setLatestOutlineData(null);
     
     // Clear previous research data
     setQuestion("");
@@ -863,6 +918,14 @@ export default function Home() {
     }
   }, [showResult, loading, answer, isInChatMode]);
 
+  useEffect(() => {
+    if (adaptiveStage !== 'executing') return;
+    const hasPath = orderedData.some((item) => item.type === 'path');
+    if (hasPath) {
+      setAdaptiveStage('completed');
+    }
+  }, [adaptiveStage, orderedData]);
+
   // Update the renderMobileContent function to use both mobile-specific functions
   const renderMobileContent = () => {
     if (!showResult) {
@@ -1009,6 +1072,10 @@ export default function Home() {
                   isProcessingChat={isProcessingChat}
                   onNewResearch={handleStartNewResearch}
                   toggleSidebar={toggleSidebar}
+                  planningLoading={loading && (adaptiveStage === 'planning' || adaptiveStage === 'await_outline_approval')}
+                  onApproveOutlineExecute={handleApproveOutlineExecute}
+                  onManualOutlineExecute={handleManualOutlineExecute}
+                  onAiRewriteOutline={handleAiRewriteOutline}
                 />
               ) : (
                 <ResearchContent
@@ -1031,6 +1098,10 @@ export default function Home() {
                   onShareClick={currentResearchId ? handleCopyUrl : undefined}
                   reset={reset}
                   isProcessingChat={isProcessingChat}
+                  planningLoading={loading && (adaptiveStage === 'planning' || adaptiveStage === 'await_outline_approval')}
+                  onApproveOutlineExecute={handleApproveOutlineExecute}
+                  onManualOutlineExecute={handleManualOutlineExecute}
+                  onAiRewriteOutline={handleAiRewriteOutline}
                 />
               )}
               

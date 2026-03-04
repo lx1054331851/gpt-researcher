@@ -292,27 +292,44 @@ class GenericLLMProvider:
 
 
     async def get_chat_response(self, messages, stream, websocket=None, **kwargs):
+        finish_reason_callback = kwargs.pop("finish_reason_callback", None)
         if not stream:
             # Getting output from the model chain using ainvoke for asynchronous invoking
             output = await self.llm.ainvoke(messages, **kwargs)
 
             res = output.content
+            if finish_reason_callback:
+                try:
+                    finish_reason_callback("completed_non_stream")
+                except Exception:
+                    pass
 
         else:
-            res = await self.stream_response(messages, websocket, **kwargs)
+            res = await self.stream_response(
+                messages,
+                websocket,
+                finish_reason_callback=finish_reason_callback,
+                **kwargs
+            )
 
         if self.chat_logger:
             await self.chat_logger.log_request(messages, res)
 
         return res
 
-    async def stream_response(self, messages, websocket=None, **kwargs):
+    async def stream_response(self, messages, websocket=None, finish_reason_callback=None, **kwargs):
         paragraph = ""
         response = ""
+        finish_reason = None
 
         # Streaming the response using the chain astream method from langchain
         async for chunk in self.llm.astream(messages, **kwargs):
             content = chunk.content
+            metadata = getattr(chunk, "response_metadata", None)
+            if isinstance(metadata, dict):
+                chunk_finish_reason = metadata.get("finish_reason")
+                if chunk_finish_reason:
+                    finish_reason = chunk_finish_reason
             if content is not None:
                 response += content
                 paragraph += content
@@ -322,6 +339,12 @@ class GenericLLMProvider:
 
         if paragraph:
             await self._send_output(paragraph, websocket)
+
+        if finish_reason_callback:
+            try:
+                finish_reason_callback(finish_reason)
+            except Exception:
+                pass
 
         return response
 

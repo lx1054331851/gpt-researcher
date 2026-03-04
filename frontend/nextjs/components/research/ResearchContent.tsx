@@ -27,6 +27,10 @@ interface ResearchContentProps {
   reset?: () => void;
   isProcessingChat?: boolean;
   bottomRef?: React.RefObject<HTMLDivElement>;
+  planningLoading?: boolean;
+  onApproveOutlineExecute?: () => void;
+  onManualOutlineExecute?: (manualOutline: any, manualBlueprint: any) => void;
+  onAiRewriteOutline?: (instruction: string) => void;
 }
 
 export default function ResearchContent({
@@ -49,7 +53,11 @@ export default function ResearchContent({
   onShareClick,
   reset,
   isProcessingChat = false,
-  bottomRef
+  bottomRef,
+  planningLoading = false,
+  onApproveOutlineExecute,
+  onManualOutlineExecute,
+  onAiRewriteOutline,
 }: ResearchContentProps) {
   const t = useTranslations();
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -83,6 +91,10 @@ export default function ResearchContent({
             currentResearchId={currentResearchId}
             isProcessingChat={isProcessingChat}
             onShareClick={onShareClick}
+            planningLoading={planningLoading}
+            onApproveOutlineExecute={onApproveOutlineExecute}
+            onManualOutlineExecute={onManualOutlineExecute}
+            onAiRewriteOutline={onAiRewriteOutline}
           />
         </div>
 

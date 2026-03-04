@@ -112,6 +112,10 @@ class WebSocketManager:
         mcp_enabled=False,
         mcp_strategy="fast",
         mcp_configs=[],
+        research_outline=None,
+        report_blueprint=None,
+        outline_locked=False,
+        user_requirements=None,
     ):
         """Start streaming the output."""
         tone = Tone[tone]
@@ -123,7 +127,11 @@ class WebSocketManager:
             task, report_type, report_source, source_urls, document_urls, tone, websocket, 
             headers=headers, query_domains=query_domains, config_path=config_path,
             language=language,
-            mcp_enabled=mcp_enabled, mcp_strategy=mcp_strategy, mcp_configs=mcp_configs
+            mcp_enabled=mcp_enabled, mcp_strategy=mcp_strategy, mcp_configs=mcp_configs,
+            research_outline=research_outline,
+            report_blueprint=report_blueprint,
+            outline_locked=outline_locked,
+            user_requirements=user_requirements,
         )
         return report
 
@@ -144,6 +152,10 @@ async def run_agent(
     mcp_enabled=False,
     mcp_strategy="fast",
     mcp_configs=[],
+    research_outline=None,
+    report_blueprint=None,
+    outline_locked=False,
+    user_requirements=None,
 ):
     """Run the agent."""    
     # Create logs handler for this research task
@@ -212,6 +224,10 @@ async def run_agent(
             language=language,
             mcp_configs=mcp_configs if mcp_enabled else None,
             mcp_strategy=mcp_strategy if mcp_enabled else None,
+            research_outline=research_outline,
+            report_blueprint=report_blueprint,
+            outline_locked=outline_locked,
+            user_requirements=user_requirements,
         )
         report = await researcher.run()
 

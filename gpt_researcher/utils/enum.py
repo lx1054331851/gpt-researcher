@@ -17,6 +17,7 @@ class ReportType(Enum):
         DetailedReport: In-depth detailed analysis report.
         SubtopicReport: Report focused on a specific subtopic.
         DeepResearch: Deep research mode with extensive analysis.
+        AdaptiveDeepResearch: Adaptive deep research with DAG orchestration.
     """
     ResearchReport = "research_report"
     ResourceReport = "resource_report"
@@ -25,6 +26,7 @@ class ReportType(Enum):
     DetailedReport = "detailed_report"
     SubtopicReport = "subtopic_report"
     DeepResearch = "deep"
+    AdaptiveDeepResearch = "adaptive_deep"
 
 
 class ReportSource(Enum):

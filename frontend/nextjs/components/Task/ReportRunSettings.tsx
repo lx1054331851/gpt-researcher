@@ -183,6 +183,7 @@ export default function ReportRunSettings({
     () => [
       { value: "research_report", label: t("settings.reportType.summary") },
       { value: "deep", label: t("settings.reportType.deep") },
+      { value: "adaptive_deep", label: t("settings.reportType.adaptiveDeep") },
       { value: "multi_agents", label: t("settings.reportType.multiAgents") },
       { value: "detailed_report", label: t("settings.reportType.detailed") },
     ],

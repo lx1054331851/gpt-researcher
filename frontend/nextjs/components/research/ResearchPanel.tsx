@@ -17,6 +17,10 @@ interface ResearchPanelProps {
   onNewResearch?: () => void;
   loading?: boolean;
   toggleSidebar?: () => void;
+  planningLoading?: boolean;
+  onApproveOutlineExecute?: () => void;
+  onManualOutlineExecute?: (manualOutline: any, manualBlueprint: any) => void;
+  onAiRewriteOutline?: (instruction: string) => void;
 }
 
 const ResearchPanel: React.FC<ResearchPanelProps> = ({
@@ -31,7 +35,11 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
   setIsCopilotVisible,
   onNewResearch,
   loading,
-  toggleSidebar
+  toggleSidebar,
+  planningLoading = false,
+  onApproveOutlineExecute,
+  onManualOutlineExecute,
+  onAiRewriteOutline,
 }) => {
   // Determine if research is complete (has answer) and copilot should be highlighted
   const researchComplete = Boolean(answer && answer.length > 0);
@@ -112,6 +120,10 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
             chatBoxSettings={chatBoxSettings}
             handleClickSuggestion={handleClickSuggestion}
             currentResearchId={currentResearchId}
+            planningLoading={planningLoading}
+            onApproveOutlineExecute={onApproveOutlineExecute}
+            onManualOutlineExecute={onManualOutlineExecute}
+            onAiRewriteOutline={onAiRewriteOutline}
           />
           
           {/* Loading indicator - show during research */}

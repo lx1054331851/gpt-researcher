@@ -17,6 +17,8 @@ export const preprocessOrderedData = (data: Data[]) => {
 
     if (type === 'question') {
       groupedData.push({ type: 'question', content });
+    } else if (type === 'outline_draft' || type === 'outline_updated') {
+      groupedData.push(item);
     } else if (type === 'report') {
       // Start a new report group if we don't have one
       if (!currentReportGroup) {

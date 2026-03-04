@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Data, ChatBoxSettings, QuestionData } from '../types/data';
+import { Data, ChatBoxSettings, OutlineDraftData, OutlineUpdatedData } from '../types/data';
 import { getHost } from '../helpers/getHost';
 
 const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//;
@@ -33,7 +33,11 @@ export const useWebSocket = (
   setAnswer: React.Dispatch<React.SetStateAction<string>>, 
   setLoading: React.Dispatch<React.SetStateAction<boolean>>,
   setShowHumanFeedback: React.Dispatch<React.SetStateAction<boolean>>,
-  setQuestionForHuman: React.Dispatch<React.SetStateAction<boolean | true>>
+  setQuestionForHuman: React.Dispatch<React.SetStateAction<boolean | true>>,
+  options?: {
+    onOutlineDraft?: (data: OutlineDraftData) => void;
+    onOutlineUpdated?: (data: OutlineUpdatedData) => void;
+  }
 ) => {
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const heartbeatInterval = useRef<number>();
@@ -118,8 +122,8 @@ export const useWebSocket = (
             mcp_configs: mcp_configs || []
           };
           
-          // Make sure we have a properly formatted command with a space after start
-          const message = `start ${JSON.stringify(dataToSend)}`;
+          const command = report_type === 'adaptive_deep' ? 'start_plan' : 'start';
+          const message = `${command} ${JSON.stringify(dataToSend)}`;
           console.log(`Sending start message, length: ${message.length}`);
           newSocket.send(message);
         } catch (error) {
@@ -147,7 +151,13 @@ export const useWebSocket = (
             const contentAndType = `${data.content}-${data.type}`;
             setOrderedData((prevOrder) => [...prevOrder, { ...data, contentAndType }]);
 
-            if (data.type === 'report') {
+            if (data.type === 'outline_draft') {
+              setLoading(false);
+              options?.onOutlineDraft?.(data as OutlineDraftData);
+            } else if (data.type === 'outline_updated') {
+              setLoading(false);
+              options?.onOutlineUpdated?.(data as OutlineUpdatedData);
+            } else if (data.type === 'report') {
               setAnswer((prev: string) => prev + data.output);
             } else if (data.type === 'report_complete') {
               // Replace entire report with the complete version (includes images)
@@ -177,7 +187,33 @@ export const useWebSocket = (
         }
       };
     }
-  }, [socket, setOrderedData, setAnswer, setLoading, setShowHumanFeedback, setQuestionForHuman]);
+  }, [options, socket, setOrderedData, setAnswer, setLoading, setShowHumanFeedback, setQuestionForHuman]);
 
-  return { socket, setSocket, initializeWebSocket };
+  const revisePlan = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        console.warn("WebSocket is not open; cannot send revise_plan");
+        return false;
+      }
+      socket.send(`revise_plan ${JSON.stringify(payload)}`);
+      setLoading(true);
+      return true;
+    },
+    [setLoading, socket]
+  );
+
+  const executePlan = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        console.warn("WebSocket is not open; cannot send execute_plan");
+        return false;
+      }
+      socket.send(`execute_plan ${JSON.stringify(payload)}`);
+      setLoading(true);
+      return true;
+    },
+    [setLoading, socket]
+  );
+
+  return { socket, setSocket, initializeWebSocket, revisePlan, executePlan };
 };

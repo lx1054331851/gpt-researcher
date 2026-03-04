@@ -37,6 +37,7 @@
     "reportType": {
       "summary": "Summary Report",
       "deep": "Deep Research",
+      "adaptiveDeep": "Adaptive Deep Research",
       "multiAgents": "Multi Agents",
       "detailed": "Detailed Report"
     },

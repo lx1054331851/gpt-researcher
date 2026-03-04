@@ -3,6 +3,7 @@ import json
 import os
 import re
 import time
+import uuid
 import shutil
 import traceback
 from typing import Awaitable, Dict, List, Any
@@ -17,6 +18,18 @@ import logging
 import hashlib
 
 from .multi_agent_runner import run_multi_agent_task
+from gpt_researcher.orchestration.outline_schema import (
+    ReportBlueprint,
+    ResearchOutline,
+    build_blueprint_from_outline,
+)
+from gpt_researcher.skills.research_planner import (
+    generate_outline,
+    normalize_blueprint_payload,
+    normalize_outline_payload,
+    revise_outline,
+    validate_outline,
+)
 
 # Import chat agent
 try:
@@ -189,8 +202,48 @@ def sanitize_filename(filename: str) -> str:
     return re.sub(r"[^\w\s-]", "", sanitized).strip()
 
 
-async def handle_start_command(websocket, data: str, manager):
-    json_data = json.loads(data[6:])
+def _parse_command_payload(data: str, command: str) -> dict[str, Any]:
+    prefix = f"{command} "
+    if not data.strip().startswith(prefix):
+        raise ValueError(f"Invalid command payload for '{command}'")
+    payload_raw = data.strip()[len(prefix):].strip()
+    if not payload_raw:
+        return {}
+    return json.loads(payload_raw)
+
+
+def _serialize_outline_payload(
+    outline: ResearchOutline,
+    blueprint: ReportBlueprint,
+    *,
+    message_type: str,
+) -> dict[str, Any]:
+    return {
+        "type": message_type,
+        "content": message_type,
+        "outline_id": outline.outline_id,
+        "outline": outline.to_dict(),
+        "report_blueprint": blueprint.to_dict(),
+        "output": {
+            "outline_id": outline.outline_id,
+            "outline": outline.to_dict(),
+            "report_blueprint": blueprint.to_dict(),
+        },
+    }
+
+
+async def handle_start_command(
+    websocket,
+    data: str,
+    manager,
+    *,
+    start_payload: dict[str, Any] | None = None,
+    research_outline: dict[str, Any] | None = None,
+    report_blueprint: dict[str, Any] | None = None,
+    outline_locked: bool = False,
+    user_requirements: str | None = None,
+):
+    json_data = start_payload if start_payload is not None else _parse_command_payload(data, "start")
     (
         task,
         report_type,
@@ -237,12 +290,229 @@ async def handle_start_command(websocket, data: str, manager):
         mcp_enabled,
         mcp_strategy,
         mcp_configs,
+        research_outline=research_outline,
+        report_blueprint=report_blueprint,
+        outline_locked=outline_locked,
+        user_requirements=user_requirements,
     )
     report = str(report)
     file_paths = await generate_report_files(report, sanitized_filename, word_fonts=word_fonts)
     # Add JSON log path to file_paths
     file_paths["json"] = os.path.relpath(logs_handler.log_file)
     await send_file_paths(websocket, file_paths)
+
+
+async def handle_start_plan_command(
+    websocket,
+    data: str,
+    manager,
+    outline_session: dict[str, dict[str, Any]],
+):
+    payload = _parse_command_payload(data, "start_plan")
+    task = str(payload.get("task") or "").strip()
+    report_type = str(payload.get("report_type") or "").strip()
+    user_requirements = str(payload.get("user_requirements") or "").strip() or None
+    language = payload.get("language")
+
+    if not task:
+        await _safe_websocket_send_json(
+            websocket,
+            {"type": "error", "content": "error", "output": "Missing task in start_plan command."},
+            context="start-plan/missing-task",
+        )
+        return
+
+    if report_type and report_type != "adaptive_deep":
+        await _safe_websocket_send_json(
+            websocket,
+            {
+                "type": "logs",
+                "content": "warning",
+                "output": "start_plan is designed for adaptive_deep. Falling back to direct execution for this report_type.",
+            },
+            context="start-plan/non-adaptive-warning",
+        )
+        await handle_start_command(websocket, data, manager, start_payload=payload)
+        return
+
+    outline, blueprint = await generate_outline(
+        query=task,
+        user_requirements=user_requirements,
+        language=language,
+    )
+
+    if not outline.outline_id:
+        outline.outline_id = uuid.uuid4().hex
+
+    outline_session[outline.outline_id] = {
+        "outline": outline.to_dict(),
+        "report_blueprint": blueprint.to_dict(),
+        "start_payload": payload,
+        "user_requirements": user_requirements,
+        "language": language,
+    }
+
+    await _safe_websocket_send_json(
+        websocket,
+        _serialize_outline_payload(outline, blueprint, message_type="outline_draft"),
+        context="start-plan/outline-draft",
+    )
+
+
+async def handle_revise_plan_command(
+    websocket,
+    data: str,
+    outline_session: dict[str, dict[str, Any]],
+):
+    payload = _parse_command_payload(data, "revise_plan")
+    outline_id = str(payload.get("outline_id") or "").strip()
+    mode = str(payload.get("mode") or "").strip() or "ai_rewrite"
+
+    if not outline_id or outline_id not in outline_session:
+        await _safe_websocket_send_json(
+            websocket,
+            {"type": "error", "content": "error", "output": "Unknown outline_id. Please generate a plan first."},
+            context="revise-plan/outline-not-found",
+        )
+        return
+
+    state = outline_session[outline_id]
+    current_outline = normalize_outline_payload(state.get("outline") or {}, query_hint=(state.get("start_payload") or {}).get("task"))
+    current_blueprint = normalize_blueprint_payload(state.get("report_blueprint") or {}, outline=current_outline)
+    language = payload.get("language") or state.get("language")
+
+    if mode == "manual_replace":
+        manual_outline = payload.get("manual_outline")
+        if not isinstance(manual_outline, dict):
+            await _safe_websocket_send_json(
+                websocket,
+                {"type": "error", "content": "error", "output": "manual_replace mode requires a full manual_outline object."},
+                context="revise-plan/manual-outline-missing",
+            )
+            return
+        revised_outline = normalize_outline_payload(
+            {
+                **manual_outline,
+                "outline_id": outline_id,
+                "query": current_outline.query,
+            },
+            query_hint=current_outline.query,
+        )
+        blueprint_payload = payload.get("report_blueprint")
+        if isinstance(blueprint_payload, dict):
+            revised_blueprint = normalize_blueprint_payload(blueprint_payload, outline=revised_outline)
+        else:
+            revised_blueprint = build_blueprint_from_outline(revised_outline)
+    else:
+        instruction = str(payload.get("instruction") or "").strip()
+        revised_outline, revised_blueprint = await revise_outline(
+            outline=current_outline,
+            instruction=instruction,
+            language=language,
+        )
+        revised_outline.outline_id = outline_id
+        if isinstance(payload.get("report_blueprint"), dict):
+            revised_blueprint = normalize_blueprint_payload(payload["report_blueprint"], outline=revised_outline)
+        elif not revised_blueprint:
+            revised_blueprint = current_blueprint
+
+    valid, errors = validate_outline(revised_outline)
+    if not valid:
+        await _safe_websocket_send_json(
+            websocket,
+            {"type": "error", "content": "error", "output": f"Outline validation failed: {', '.join(errors)}"},
+            context="revise-plan/validation-failed",
+        )
+        return
+
+    state["outline"] = revised_outline.to_dict()
+    state["report_blueprint"] = revised_blueprint.to_dict()
+    state["language"] = language
+
+    await _safe_websocket_send_json(
+        websocket,
+        _serialize_outline_payload(revised_outline, revised_blueprint, message_type="outline_updated"),
+        context="revise-plan/outline-updated",
+    )
+
+
+async def handle_execute_plan_command(
+    websocket,
+    data: str,
+    manager,
+    outline_session: dict[str, dict[str, Any]],
+):
+    payload = _parse_command_payload(data, "execute_plan")
+    outline_id = str(payload.get("outline_id") or "").strip()
+    if not outline_id or outline_id not in outline_session:
+        await _safe_websocket_send_json(
+            websocket,
+            {"type": "error", "content": "error", "output": "Unknown outline_id. Please start_plan first."},
+            context="execute-plan/outline-not-found",
+        )
+        return
+
+    state = outline_session[outline_id]
+    start_payload = dict(state.get("start_payload") or {})
+    start_payload.update({k: v for k, v in payload.items() if k in {
+        "task",
+        "report_type",
+        "source_urls",
+        "document_urls",
+        "tone",
+        "language",
+        "headers",
+        "report_source",
+        "query_domains",
+        "mcp_enabled",
+        "mcp_strategy",
+        "mcp_configs",
+        "word_fonts",
+    }})
+
+    approved_outline_payload = payload.get("approved_outline")
+    if isinstance(approved_outline_payload, dict):
+        final_outline = normalize_outline_payload(
+            {
+                **approved_outline_payload,
+                "outline_id": outline_id,
+                "query": start_payload.get("task") or approved_outline_payload.get("query"),
+            },
+            query_hint=start_payload.get("task"),
+        )
+    else:
+        final_outline = normalize_outline_payload(state.get("outline") or {}, query_hint=start_payload.get("task"))
+
+    blueprint_payload = payload.get("report_blueprint")
+    if isinstance(blueprint_payload, dict):
+        final_blueprint = normalize_blueprint_payload(blueprint_payload, outline=final_outline)
+    else:
+        final_blueprint = normalize_blueprint_payload(state.get("report_blueprint") or {}, outline=final_outline)
+
+    valid, errors = validate_outline(final_outline)
+    if not valid:
+        await _safe_websocket_send_json(
+            websocket,
+            {"type": "error", "content": "error", "output": f"Outline validation failed: {', '.join(errors)}"},
+            context="execute-plan/validation-failed",
+        )
+        return
+
+    state["outline"] = final_outline.to_dict()
+    state["report_blueprint"] = final_blueprint.to_dict()
+    state["start_payload"] = start_payload
+    state["user_requirements"] = payload.get("user_requirements") or state.get("user_requirements")
+
+    await handle_start_command(
+        websocket,
+        "",
+        manager,
+        start_payload=start_payload,
+        research_outline=final_outline.to_dict(),
+        report_blueprint=final_blueprint.to_dict(),
+        outline_locked=True,
+        user_requirements=state.get("user_requirements"),
+    )
 
 
 async def handle_human_feedback(data: str):
@@ -397,6 +667,7 @@ async def execute_multi_agents(manager) -> Any:
 
 async def handle_websocket_communication(websocket, manager):
     running_task: asyncio.Task | None = None
+    outline_session: dict[str, dict[str, Any]] = {}
 
     def run_long_running_task(awaitable: Awaitable) -> asyncio.Task:
         async def safe_run():
@@ -446,6 +717,21 @@ async def handle_websocket_communication(websocket, manager):
                     if not sent:
                         break
                 # Normalize command detection by checking startswith after stripping whitespace
+                elif data.strip().startswith("start_plan"):
+                    logger.info("Processing start_plan command")
+                    running_task = run_long_running_task(
+                        handle_start_plan_command(websocket, data, manager, outline_session)
+                    )
+                elif data.strip().startswith("revise_plan"):
+                    logger.info("Processing revise_plan command")
+                    running_task = run_long_running_task(
+                        handle_revise_plan_command(websocket, data, outline_session)
+                    )
+                elif data.strip().startswith("execute_plan"):
+                    logger.info("Processing execute_plan command")
+                    running_task = run_long_running_task(
+                        handle_execute_plan_command(websocket, data, manager, outline_session)
+                    )
                 elif data.strip().startswith("start"):
                     logger.info(f"Processing start command")
                     running_task = run_long_running_task(

@@ -22,6 +22,10 @@ class BasicReport:
         headers=None,
         mcp_configs=None,
         mcp_strategy=None,
+        research_outline=None,
+        report_blueprint=None,
+        outline_locked: bool = False,
+        user_requirements: str | None = None,
     ):
         self.query = query
         self.query_domains = query_domains
@@ -58,6 +62,13 @@ class BasicReport:
             gpt_researcher_params["mcp_configs"] = mcp_configs
         if mcp_strategy is not None:
             gpt_researcher_params["mcp_strategy"] = mcp_strategy
+        if research_outline is not None:
+            gpt_researcher_params["research_outline"] = research_outline
+        if report_blueprint is not None:
+            gpt_researcher_params["report_blueprint"] = report_blueprint
+        gpt_researcher_params["outline_locked"] = outline_locked
+        if user_requirements is not None:
+            gpt_researcher_params["user_requirements"] = user_requirements
 
         self.gpt_researcher = GPTResearcher(**gpt_researcher_params)
 

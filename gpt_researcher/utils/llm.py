@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, Callable
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import PromptTemplate
@@ -48,6 +48,7 @@ async def create_chat_completion(
         llm_kwargs: dict[str, Any] | None = None,
         cost_callback: callable = None,
         reasoning_effort: str | None = ReasoningEfforts.Medium.value,
+        finish_reason_callback: Callable[[str | None], None] | None = None,
         **kwargs
 ) -> str:
     """Create a chat completion using the OpenAI API
@@ -99,7 +100,11 @@ async def create_chat_completion(
     # create response
     for _ in range(10):  # maximum of 10 attempts
         response = await provider.get_chat_response(
-            messages, stream, websocket, **kwargs
+            messages,
+            stream,
+            websocket,
+            finish_reason_callback=finish_reason_callback,
+            **kwargs
         )
 
         if cost_callback:

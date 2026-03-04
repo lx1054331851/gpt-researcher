@@ -22,15 +22,30 @@ async def get_search_results(query: str, retriever: Any, query_domains: List[str
     Returns:
         A list of search results
     """
+    headers = getattr(researcher, "headers", {}) if researcher else {}
+    retriever_name = getattr(retriever, "__name__", "").lower()
+
     # Check if this is an MCP retriever and pass the researcher instance
-    if "mcpretriever" in retriever.__name__.lower():
+    if "mcpretriever" in retriever_name:
         search_retriever = retriever(
-            query, 
+            query,
+            headers=headers,
             query_domains=query_domains,
-            researcher=researcher  # Pass researcher instance for MCP retrievers
+            researcher=researcher,  # Pass researcher instance for MCP retrievers
         )
     else:
-        search_retriever = retriever(query, query_domains=query_domains)
+        # Retriever signatures are not fully consistent, so use fallbacks.
+        try:
+            search_retriever = retriever(
+                query,
+                headers=headers,
+                query_domains=query_domains,
+            )
+        except TypeError:
+            try:
+                search_retriever = retriever(query, query_domains=query_domains)
+            except TypeError:
+                search_retriever = retriever(query)
     
     return search_retriever.search()
 

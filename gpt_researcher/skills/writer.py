@@ -44,6 +44,8 @@ class ReportGenerator:
             "websocket": self.researcher.websocket,
             "cfg": self.researcher.cfg,
             "headers": self.researcher.headers,
+            "report_blueprint": self.researcher.report_blueprint,
+            "user_requirements": self.researcher.user_requirements,
         }
 
     async def write_report(self, existing_headers: list = [], relevant_written_contents: list = [], ext_context=None, custom_prompt="", available_images: list = None) -> str:
@@ -108,7 +110,18 @@ class ReportGenerator:
         else:
             report_params["cost_callback"] = self.researcher.add_costs
 
+        generation_meta: Dict[str, object] = {}
+
+        def _capture_generation_meta(meta: Dict[str, object]) -> None:
+            generation_meta.update(meta or {})
+
+        report_params["generation_metadata_callback"] = _capture_generation_meta
         report = await generate_report(**report_params, **self.researcher.kwargs)
+
+        if generation_meta:
+            trace = getattr(self.researcher, "research_trace", {}) or {}
+            trace["report_generation"] = generation_meta
+            self.researcher.research_trace = trace
 
         if self.researcher.verbose:
             await stream_output(

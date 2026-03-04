@@ -6,6 +6,7 @@ import ImageSection from './ResearchBlocks/ImageSection';
 import SubQuestions from './ResearchBlocks/elements/SubQuestions';
 import LogsSection from './ResearchBlocks/LogsSection';
 import AccessReport from './ResearchBlocks/AccessReport';
+import OutlineEditor from './ResearchBlocks/OutlineEditor';
 import { preprocessOrderedData } from '../utils/dataProcessing';
 import { Data } from '../types/data';
 
@@ -18,6 +19,10 @@ interface ResearchResultsProps {
   currentResearchId?: string;
   isProcessingChat?: boolean;
   onShareClick?: () => void;
+  planningLoading?: boolean;
+  onApproveOutlineExecute?: () => void;
+  onManualOutlineExecute?: (manualOutline: any, manualBlueprint: any) => void;
+  onAiRewriteOutline?: (instruction: string) => void;
 }
 
 export const ResearchResults: React.FC<ResearchResultsProps> = ({
@@ -28,11 +33,18 @@ export const ResearchResults: React.FC<ResearchResultsProps> = ({
   handleClickSuggestion,
   currentResearchId,
   isProcessingChat = false,
-  onShareClick
+  onShareClick,
+  planningLoading = false,
+  onApproveOutlineExecute,
+  onManualOutlineExecute,
+  onAiRewriteOutline,
 }) => {
   const groupedData = preprocessOrderedData(orderedData);
   const pathData = groupedData.find(data => data.type === 'path');
   const initialQuestion = groupedData.find(data => data.type === 'question');
+  const latestOutline = [...groupedData]
+    .reverse()
+    .find(data => data.type === 'outline_updated' || data.type === 'outline_draft');
 
   const chatComponents = groupedData
     .filter(data => {
@@ -70,6 +82,17 @@ export const ResearchResults: React.FC<ResearchResultsProps> = ({
   return (
     <>
       {initialQuestion && <Question question={initialQuestion.content} />}
+      {latestOutline && !pathData && onApproveOutlineExecute && onManualOutlineExecute && onAiRewriteOutline && (
+        <OutlineEditor
+          outlineId={latestOutline.outline_id}
+          outline={latestOutline.outline}
+          reportBlueprint={latestOutline.report_blueprint}
+          loading={planningLoading}
+          onApproveExecute={onApproveOutlineExecute}
+          onManualEditExecute={onManualOutlineExecute}
+          onAiRewrite={onAiRewriteOutline}
+        />
+      )}
       {orderedData.length > 0 && <LogsSection logs={allLogs} />}
       {subqueriesComponent && (
         <SubQuestions

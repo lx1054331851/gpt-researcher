@@ -52,11 +52,15 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
-asyncio_mode = "strict"
 addopts = "-v"
 testpaths = ["tests"]
 python_files = "test_*.py"
-asyncio_fixture_loop_scope = "function"
+markers = [
+    "asyncio: mark test to run in asyncio event loop",
+]
+filterwarnings = [
+    "ignore:urllib3 \\(.*\\) or chardet \\(.*\\)/charset_normalizer \\(.*\\) doesn't match a supported version!:requests.exceptions.RequestsDependencyWarning",
+]
 
 [tool.uv.sources]
 gpt-researcher = { workspace = true }
@@ -84,7 +88,7 @@ dependencies = [
     "brotli>=1.1.0",
     "certifi>=2025.4.26",
     "cffi>=1.17.1",
-    "chardet>=5.2.0",
+    "chardet>=5.2.0,<6.0.0",
     "charset-normalizer>=3.4.2",
     "click>=8.1.0",
     "colorama>=0.4.6",
@@ -169,6 +173,7 @@ dependencies = [
     "pymupdf>=1.26.0",
     "pypdf>=5.5.0",
     "pyphen>=0.17.2",
+    "pytest>=9.0.2",
     "python-docx>=1.1.2",
     "python-dotenv>=1.1.0",
     "python-iso639>=2025.2.18",

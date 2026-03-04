@@ -64,6 +64,10 @@ class ResearchRequest(BaseModel):
     repo_name: str
     branch_name: str
     generate_in_background: bool = True
+    research_outline: dict | None = None
+    report_blueprint: dict | None = None
+    outline_locked: bool = False
+    user_requirements: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -289,7 +293,11 @@ async def write_report(research_request: ResearchRequest, research_id: str = Non
         headers=research_request.headers,
         query_domains=[],
         config_path="",
-        return_researcher=True
+        return_researcher=True,
+        research_outline=research_request.research_outline,
+        report_blueprint=research_request.report_blueprint,
+        outline_locked=research_request.outline_locked,
+        user_requirements=research_request.user_requirements,
     )
 
     docx_path = await write_md_to_word(
@@ -307,6 +315,7 @@ async def write_report(research_request: ResearchRequest, research_id: str = Non
                 "research_costs": researcher.get_costs(),
                 "visited_urls": list(researcher.visited_urls),
                 "research_images": researcher.get_research_images(),
+                "research_trace": researcher.get_research_trace() if hasattr(researcher, "get_research_trace") else {},
                 # "research_sources": researcher.get_research_sources(),  # Raw content of sources may be very large
             },
             "report": report,

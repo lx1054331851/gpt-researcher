@@ -29,7 +29,67 @@ export interface ChatData extends BaseData {
   metadata?: any; // For storing search results and other contextual information
 }
 
-export type Data = BasicData | LanggraphButtonData | DifferencesData | QuestionData | ChatData;
+export interface OutlineSectionData {
+  id: string;
+  title: string;
+  intent: string;
+  key_questions: string[];
+  stage: "foundation" | "evidence" | "judgement";
+  priority: number;
+  required: boolean;
+}
+
+export interface ResearchOutlineData {
+  outline_id: string;
+  query: string;
+  objective: string;
+  audience?: string | null;
+  constraints: string[];
+  sections: OutlineSectionData[];
+}
+
+export interface SectionSpecData {
+  id: string;
+  title: string;
+  purpose: string;
+  stage: "foundation" | "evidence" | "judgement";
+  required_evidence_types: string[];
+  min_citations: number;
+  must_include?: string[];
+}
+
+export interface ReportBlueprintData {
+  section_order: string[];
+  section_specs: SectionSpecData[];
+  narrative_strategy: string;
+  citation_policy?: Record<string, any>;
+  output_constraints?: string[];
+}
+
+export interface OutlineDraftData extends BaseData {
+  type: 'outline_draft';
+  content?: string;
+  outline_id: string;
+  outline: ResearchOutlineData;
+  report_blueprint: ReportBlueprintData;
+}
+
+export interface OutlineUpdatedData extends BaseData {
+  type: 'outline_updated';
+  content?: string;
+  outline_id: string;
+  outline: ResearchOutlineData;
+  report_blueprint: ReportBlueprintData;
+}
+
+export type Data =
+  | BasicData
+  | LanggraphButtonData
+  | DifferencesData
+  | QuestionData
+  | ChatData
+  | OutlineDraftData
+  | OutlineUpdatedData;
 
 export interface MCPConfig {
   name: string;
@@ -71,3 +131,10 @@ export interface ResearchHistoryItem {
   orderedData: Data[];
   chatMessages?: ChatMessage[];
 } 
+
+export type AdaptiveResearchStage =
+  | 'idle'
+  | 'planning'
+  | 'await_outline_approval'
+  | 'executing'
+  | 'completed';

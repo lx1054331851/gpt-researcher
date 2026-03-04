@@ -23,6 +23,10 @@ interface CopilotResearchContentProps {
   isProcessingChat?: boolean;
   onNewResearch?: () => void;
   toggleSidebar?: () => void;
+  planningLoading?: boolean;
+  onApproveOutlineExecute?: () => void;
+  onManualOutlineExecute?: (manualOutline: any, manualBlueprint: any) => void;
+  onAiRewriteOutline?: (instruction: string) => void;
 }
 
 export default function CopilotResearchContent({
@@ -44,7 +48,11 @@ export default function CopilotResearchContent({
   reset,
   isProcessingChat = false,
   onNewResearch,
-  toggleSidebar
+  toggleSidebar,
+  planningLoading = false,
+  onApproveOutlineExecute,
+  onManualOutlineExecute,
+  onAiRewriteOutline,
 }: CopilotResearchContentProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   // Initialize copilot as hidden when loading
@@ -219,6 +227,10 @@ export default function CopilotResearchContent({
           onNewResearch={onNewResearch}
           loading={loading}
           toggleSidebar={toggleSidebar}
+          planningLoading={planningLoading}
+          onApproveOutlineExecute={onApproveOutlineExecute}
+          onManualOutlineExecute={onManualOutlineExecute}
+          onAiRewriteOutline={onAiRewriteOutline}
         />
       </div>
 
