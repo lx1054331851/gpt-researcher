@@ -26,6 +26,8 @@ const DEFAULT_CHAT_BOX_SETTINGS: ChatBoxSettings = {
   report_type: "research_report",
   tone: "Objective",
   report_language: "chinese",
+  report_style: "strategic_report",
+  source_policy: "medium_tier",
   word_fonts: ["仿宋", "FangSong", "STFangsong"],
   domains: [],
   defaultReportType: "research_report",

@@ -9,7 +9,13 @@ interface ReportRunSettingsProps {
   className?: string;
 }
 
-type ReportRunField = "report_type" | "report_source" | "report_language" | "tone";
+type ReportRunField =
+  | "report_type"
+  | "report_source"
+  | "report_language"
+  | "tone"
+  | "report_style"
+  | "source_policy";
 
 type SelectOption = {
   value: string;
@@ -216,12 +222,34 @@ export default function ReportRunSettings({
     [t]
   );
 
+  const reportStyleOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "strategic_report", label: t("settings.reportStyle.strategicReport") },
+      { value: "consulting_brief", label: t("settings.reportStyle.consultingBrief") },
+    ],
+    [t]
+  );
+
+  const sourcePolicyOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "strict_tier", label: t("settings.sourcePolicy.strictTier") },
+      { value: "medium_tier", label: t("settings.sourcePolicy.mediumTier") },
+      { value: "broad_collect", label: t("settings.sourcePolicy.broadCollect") },
+    ],
+    [t]
+  );
+
+  const isAdaptiveDeep = chatBoxSettings.report_type === "adaptive_deep";
+  const gridClassName = compact
+    ? "grid grid-cols-1 gap-3 sm:grid-cols-2"
+    : `grid grid-cols-1 gap-3 sm:grid-cols-2 ${isAdaptiveDeep ? "md:grid-cols-3" : "md:grid-cols-4"}`;
+
   return (
     <div
       ref={wrapperRef}
       className={`relative z-[400] mt-4 rounded-xl border border-gray-600/35 bg-gradient-to-b from-slate-800/40 to-slate-900/35 p-3 shadow-[0_18px_35px_-18px_rgba(3,7,18,0.85)] backdrop-blur-md sm:p-4 ${className}`}
     >
-      <div className={compact ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4"}>
+      <div className={gridClassName}>
         <LuxeSelect
           id="home_report_type"
           field="report_type"
@@ -269,6 +297,34 @@ export default function ReportRunSettings({
           onSelect={handleFieldChange}
           compact={compact}
         />
+
+        {isAdaptiveDeep && (
+          <LuxeSelect
+            id="home_report_style"
+            field="report_style"
+            label={t("settings.reportStyleLabel")}
+            value={chatBoxSettings.report_style}
+            options={reportStyleOptions}
+            openField={openField}
+            setOpenField={setOpenField}
+            onSelect={handleFieldChange}
+            compact={compact}
+          />
+        )}
+
+        {isAdaptiveDeep && (
+          <LuxeSelect
+            id="home_source_policy"
+            field="source_policy"
+            label={t("settings.sourcePolicyLabel")}
+            value={chatBoxSettings.source_policy}
+            options={sourcePolicyOptions}
+            openField={openField}
+            setOpenField={setOpenField}
+            onSelect={handleFieldChange}
+            compact={compact}
+          />
+        )}
       </div>
 
       <style jsx>{`

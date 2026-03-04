@@ -61,6 +61,17 @@
     "wordFontsPlaceholder": "例如：仿宋, FangSong, STFangsong",
     "wordFontsHelp": "可输入多个字体（逗号分隔），将按顺序优先使用。",
     "toneLabel": "语气",
+    "reportStyleLabel": "Adaptive 文体",
+    "reportStyle": {
+      "strategicReport": "战略报告体",
+      "consultingBrief": "咨询简报体"
+    },
+    "sourcePolicyLabel": "来源策略",
+    "sourcePolicy": {
+      "strictTier": "严格分级",
+      "mediumTier": "中等分级",
+      "broadCollect": "宽泛采集"
+    },
     "toneOptions": {
       "Objective": "客观",
       "Formal": "正式",

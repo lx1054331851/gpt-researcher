@@ -68,6 +68,8 @@ class ResearchRequest(BaseModel):
     report_blueprint: dict | None = None
     outline_locked: bool = False
     user_requirements: str | None = None
+    report_style: str = "strategic_report"
+    source_policy: str = "medium_tier"
 
 
 class ChatRequest(BaseModel):
@@ -298,6 +300,8 @@ async def write_report(research_request: ResearchRequest, research_id: str = Non
         report_blueprint=research_request.report_blueprint,
         outline_locked=research_request.outline_locked,
         user_requirements=research_request.user_requirements,
+        report_style=research_request.report_style,
+        source_policy=research_request.source_policy,
     )
 
     docx_path = await write_md_to_word(

@@ -41,6 +41,8 @@ const DEFAULT_CHAT_BOX_SETTINGS: ChatBoxSettings = {
   report_source: "web",
   tone: "Objective",
   report_language: "chinese",
+  report_style: "strategic_report",
+  source_policy: "medium_tier",
   word_fonts: ["仿宋", "FangSong", "STFangsong"],
   domains: [],
   defaultReportType: "research_report",
@@ -152,6 +154,8 @@ export default function Home() {
       outline_id: outlineData.outline_id,
       approved_outline: outlineData.outline,
       report_blueprint: outlineData.report_blueprint,
+      report_style: chatBoxSettings.report_style,
+      source_policy: chatBoxSettings.source_policy,
     });
     if (!sent) {
       setAdaptiveStage('await_outline_approval');
@@ -170,6 +174,8 @@ export default function Home() {
       outline_id: outlineData.outline_id,
       approved_outline: manualOutline,
       report_blueprint: manualBlueprint,
+      report_style: chatBoxSettings.report_style,
+      source_policy: chatBoxSettings.source_policy,
     });
     if (!sent) {
       setAdaptiveStage('await_outline_approval');
@@ -188,6 +194,8 @@ export default function Home() {
       outline_id: outlineData.outline_id,
       mode: 'ai_rewrite',
       instruction,
+      report_style: chatBoxSettings.report_style,
+      source_policy: chatBoxSettings.source_policy,
     });
     if (!sent) {
       setAdaptiveStage('await_outline_approval');

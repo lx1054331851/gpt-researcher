@@ -1,7 +1,14 @@
 import asyncio
 import re
+from urllib.parse import urlparse
 from typing import List, Dict, Any, Callable
 from ..config.config import Config
+from ..orchestration.coverage_lenses import (
+    assess_chain_coverage,
+    assess_text_coverage,
+    coverage_chain_prompt_block,
+    coverage_lens_prompt_block,
+)
 from ..utils.llm import create_chat_completion
 from ..utils.logger import get_formatted_logger
 from ..prompts import PromptFamily, get_prompt_by_report_type
@@ -21,6 +28,20 @@ REFERENCE_SECTION_PATTERN = re.compile(
 )
 TRAILING_HEADER_PATTERN = re.compile(r"^#{1,6}\s+.+$")
 MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+)\)")
+URL_PATTERN = re.compile(r"https?://[^\s)]+")
+DOMAIN_TOKEN_PATTERN = re.compile(
+    r"(?<![@/])\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?:/[a-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*)?",
+    flags=re.IGNORECASE,
+)
+PLACEHOLDER_REFERENCE_PATTERN = re.compile(
+    r"^(?:链接|來源|来源|source|sources|reference|references|ref|n/?a|none|待补充|tbd)$",
+    flags=re.IGNORECASE,
+)
+COVERAGE_CHECK_PATTERN = re.compile(r"(coverage check|gap notes|覆盖检查|缺口说明|缺口)", flags=re.IGNORECASE)
+DECISION_SHEET_PATTERN = re.compile(
+    r"\|\s*(?:option|方案)\s*\|\s*(?:expected value|预期价值)\s*\|\s*(?:feasibility|可行性)\s*\|",
+    flags=re.IGNORECASE,
+)
 
 
 def evaluate_report_completeness(
@@ -60,6 +81,13 @@ def _truncate_text(value: str, max_chars: int) -> str:
     if max_chars <= 0:
         return value
     return value[:max_chars]
+
+
+def _domain_from_url(url: str) -> str:
+    try:
+        return (urlparse(url).netloc or "").lower()
+    except Exception:
+        return ""
 
 
 def _is_transport_error(exc: Exception) -> bool:
@@ -105,6 +133,102 @@ def _build_reference_section_from_report(report: str, language: str, max_items: 
         fallback_line = "- 未提取到可用外部链接。" if heading == "## 参考文献" else "- No external links were extracted."
         lines = [fallback_line]
     return f"{heading}\n" + "\n".join(lines)
+
+
+def _normalize_url_candidate(raw_value: str) -> str:
+    value = str(raw_value or "").strip().strip("()[]{}<>,.;")
+    if not value:
+        return ""
+    if PLACEHOLDER_REFERENCE_PATTERN.match(value):
+        return ""
+    if value.lower().startswith(("http://", "https://")):
+        normalized = value
+    else:
+        normalized = f"https://{value}"
+    try:
+        parsed = re.sub(r"\s+", "", normalized)
+        if not parsed:
+            return ""
+        parts = urlparse(parsed)
+        if not parts.netloc or "." not in parts.netloc:
+            return ""
+        return f"{parts.scheme}://{parts.netloc}{parts.path or ''}{('?' + parts.query) if parts.query else ''}"
+    except Exception:
+        return ""
+
+
+def _extract_reference_urls(report: str) -> list[str]:
+    urls: list[str] = []
+    seen: set[str] = set()
+
+    def _append(candidate: str) -> None:
+        normalized = _normalize_url_candidate(candidate)
+        if not normalized:
+            return
+        key = normalized.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        urls.append(normalized)
+
+    for match in MARKDOWN_LINK_PATTERN.finditer(report or ""):
+        _append(match.group(2))
+
+    for match in URL_PATTERN.finditer(report or ""):
+        _append(match.group(0))
+
+    section_match = REFERENCE_SECTION_PATTERN.search(report or "")
+    if section_match:
+        ref_section = (report or "")[section_match.start():]
+        for line in ref_section.splitlines():
+            cleaned = line.strip().lstrip("-*").strip()
+            if not cleaned:
+                continue
+            if PLACEHOLDER_REFERENCE_PATTERN.match(cleaned):
+                continue
+            for domain_token in DOMAIN_TOKEN_PATTERN.findall(cleaned):
+                _append(domain_token)
+
+    return urls
+
+
+def _build_reference_section_from_urls(urls: list[str], language: str, max_items: int = 20) -> str:
+    heading = _reference_heading(language)
+    lines: list[str] = []
+    for url in (urls or [])[:max_items]:
+        domain = _domain_from_url(url) or "source"
+        lines.append(f"- [{domain}]({url})")
+    if not lines:
+        fallback_line = "- 未提取到可用外部链接。" if heading == "## 参考文献" else "- No external links were extracted."
+        lines = [fallback_line]
+    return f"{heading}\n" + "\n".join(lines)
+
+
+def _split_report_references(report: str) -> tuple[str, str]:
+    match = REFERENCE_SECTION_PATTERN.search(report or "")
+    if not match:
+        return (report or "").rstrip(), ""
+    return (report or "")[: match.start()].rstrip(), (report or "")[match.start():].strip()
+
+
+def _sanitize_reference_hygiene(
+    report: str,
+    language: str,
+    extra_context: str = "",
+) -> tuple[str, dict[str, Any]]:
+    body, existing_reference_section = _split_report_references(report or "")
+    merged_source_text = "\n".join([str(report or ""), str(extra_context or "")]).strip()
+    urls = _extract_reference_urls(merged_source_text)
+    rebuilt_reference_section = _build_reference_section_from_urls(urls, language=language)
+    existing_clean = existing_reference_section.strip()
+    changed = existing_clean != rebuilt_reference_section.strip()
+    sanitized = f"{body.rstrip()}\n\n{rebuilt_reference_section}".strip()
+    metadata = {
+        "reference_url_count": len(urls),
+        "reference_hygiene_changed": changed,
+        "reference_had_existing_section": bool(existing_clean),
+    }
+    return sanitized, metadata
 
 
 def _apply_emergency_completion(
@@ -213,6 +337,91 @@ def _extract_h2_titles(markdown_text: str) -> list[str]:
     return titles
 
 
+def _extract_query_focus_tokens(query: str) -> list[str]:
+    raw = re.findall(r"[\u4e00-\u9fff]{2,}|[A-Za-z][A-Za-z0-9_-]{2,}", str(query or ""))
+    stopwords = {
+        "what", "when", "where", "which", "who", "why", "how", "the", "and", "for", "with",
+        "from", "this", "that", "about", "report", "research", "analysis", "deep", "adaptive",
+        "什么", "如何", "哪些", "关于", "研究", "报告", "分析",
+    }
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for token in raw:
+        key = token.lower().strip()
+        if not key or key in stopwords:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(token.strip())
+    return deduped[:10]
+
+
+def _extract_conclusion_block(report: str) -> str:
+    if not report:
+        return ""
+    lines = (report or "").splitlines()
+    start_idx = -1
+    for idx, line in enumerate(lines):
+        if CONCLUSION_SECTION_PATTERN.match(line.strip()):
+            start_idx = idx
+            break
+    if start_idx < 0:
+        return report
+    collected: list[str] = []
+    for idx in range(start_idx, len(lines)):
+        line = lines[idx]
+        if idx > start_idx and re.match(r"^#{1,6}\s+\S+", line.strip()):
+            break
+        collected.append(line)
+    return "\n".join(collected).strip()
+
+
+def evaluate_goal_alignment(report: str, query: str) -> tuple[bool, list[str]]:
+    """
+    Basic alignment checks for adaptive_deep quality KPI:
+    - conclusion should mention core query focus
+    - if query includes explicit time tokens, conclusion should address them
+    - avoid methodology-only output without factual signals
+    """
+    issues: list[str] = []
+    normalized_report = (report or "").lower()
+    conclusion = _extract_conclusion_block(report).lower()
+
+    focus_tokens = _extract_query_focus_tokens(query)
+    if focus_tokens:
+        token_hits = sum(
+            1 for token in focus_tokens[:4]
+            if token.lower() in conclusion or token.lower() in normalized_report
+        )
+        if token_hits == 0:
+            issues.append("missing_query_focus_in_conclusion")
+
+    query_time_tokens = re.findall(r"(?:19|20)\d{2}|(?:19|20)\d{2}年", str(query or ""))
+    if query_time_tokens:
+        has_time_in_conclusion = any(token in conclusion for token in [str(t).lower() for t in query_time_tokens])
+        if not has_time_in_conclusion:
+            issues.append("missing_timepoint_in_conclusion")
+
+    methodology_markers = (
+        "methodology", "framework", "future work", "generic approach", "high-level process",
+        "方法论", "框架", "后续研究", "通用流程", "高层方法",
+    )
+    method_hits = sum(1 for token in methodology_markers if token in normalized_report)
+    factual_signal = bool(MARKDOWN_LINK_PATTERN.search(report or "")) or bool(re.search(r"\b\d{2,}\b", report or ""))
+    if method_hits >= 3 and not factual_signal:
+        issues.append("methodology_only_without_facts")
+
+    # Detect broad single-dimension bias in longer multi-section outputs.
+    h2_count = len(_extract_h2_titles(report))
+    if h2_count >= 3:
+        coverage = assess_text_coverage([report or ""])
+        if coverage.get("ratio", 0.0) < 0.35 and len(coverage.get("covered_ids") or []) <= 2:
+            issues.append("single_dimension_bias")
+
+    return len(issues) == 0, issues
+
+
 def _validate_blueprint_section_coverage(report: str, report_blueprint: dict[str, Any]) -> tuple[bool, list[str]]:
     rendered_titles = {title.strip().lower() for title in _extract_h2_titles(report)}
     missing: list[str] = []
@@ -228,12 +437,198 @@ def _validate_blueprint_section_coverage(report: str, report_blueprint: dict[str
     return len(missing) == 0, missing
 
 
+def _evaluate_coverage_lens_report(report: str) -> dict[str, Any]:
+    return assess_text_coverage([report or ""])
+
+
+def _evaluate_chain_coverage_report(report: str) -> dict[str, Any]:
+    return assess_chain_coverage([report or ""])
+
+
+async def _patch_coverage_gaps_once(
+    *,
+    report: str,
+    query: str,
+    context: str,
+    missing_lenses: list[str],
+    missing_chain_steps: list[str] | None,
+    language: str,
+    tone: Tone,
+    source_policy: str,
+    adaptive_style_instruction: str,
+    cfg,
+    agent_role_prompt: str,
+    websocket,
+    cost_callback: callable,
+    finish_reason_callback: Callable[[str | None], None] | None = None,
+    **kwargs,
+) -> tuple[str, bool]:
+    missing_text = ", ".join(missing_lenses or [])
+    missing_chain_text = ", ".join(missing_chain_steps or [])
+    prompt = f"""
+COVERAGE_GAP_PATCH_TASK
+The report below is missing analysis coverage in these lenses:
+{missing_text}
+
+The report also has potential narrative-chain gaps in:
+{missing_chain_text or "none"}
+
+Coverage lenses reference:
+{coverage_lens_prompt_block()}
+
+Coverage chain reference:
+{coverage_chain_prompt_block()}
+
+Task:
+- Append concise markdown subsections to close missing lenses.
+- Close chain gaps so the report reads from macro context to executable actions.
+- Include explicit "Gap Notes" with reason + follow-up evidence action for any lens still unresolved.
+- Keep existing report unchanged; append only incremental content.
+- Keep recommendations decision-oriented and consistent with source policy `{source_policy}`.
+- Add citations with markdown links where possible.
+- Write in {language}; tone: {tone.value}.
+- {adaptive_style_instruction}
+
+Research query:
+{query}
+
+Context:
+{context}
+
+Current report:
+{report}
+"""
+    patch = await _generate_report_once(
+        cfg=cfg,
+        agent_role_prompt=agent_role_prompt,
+        messages=[
+            {"role": "system", "content": f"{agent_role_prompt}"},
+            {"role": "user", "content": prompt},
+        ],
+        websocket=websocket,
+        cost_callback=cost_callback,
+        finish_reason_callback=finish_reason_callback,
+        **kwargs,
+    )
+    if not patch.strip():
+        return report, False
+    return f"{report.rstrip()}\n\n{patch.lstrip()}", True
+
+
+async def _patch_adaptive_artifacts_once(
+    *,
+    report: str,
+    query: str,
+    context: str,
+    language: str,
+    tone: Tone,
+    source_policy: str,
+    adaptive_style_instruction: str,
+    cfg,
+    agent_role_prompt: str,
+    websocket,
+    cost_callback: callable,
+    finish_reason_callback: Callable[[str | None], None] | None = None,
+    **kwargs,
+) -> tuple[str, bool]:
+    prompt = f"""
+ADAPTIVE_ARTIFACT_PATCH_TASK
+The report below is missing one or more required adaptive artifacts.
+
+Add concise markdown-only content to ensure:
+1) Explicit "Coverage Check" and/or "Gap Notes" subsection:
+   - list covered analysis lenses,
+   - list missing lenses/chain steps (if any),
+   - give reason + follow-up evidence action.
+2) A compact "Decision Sheet" table with columns:
+   Option | Expected Value | Feasibility | Main Risk | First Experiment | Go/No-Go Signal
+
+Rules:
+- Append only incremental content; do not rewrite existing sections.
+- Keep output decision-oriented and aligned to source policy `{source_policy}`.
+- Use markdown links for citations where possible.
+- Write in {language}; tone: {tone.value}.
+- {adaptive_style_instruction}
+
+Research query:
+{query}
+
+Context:
+{context}
+
+Current report:
+{report}
+"""
+    patch = await _generate_report_once(
+        cfg=cfg,
+        agent_role_prompt=agent_role_prompt,
+        messages=[
+            {"role": "system", "content": f"{agent_role_prompt}"},
+            {"role": "user", "content": prompt},
+        ],
+        websocket=websocket,
+        cost_callback=cost_callback,
+        finish_reason_callback=finish_reason_callback,
+        **kwargs,
+    )
+    if not patch.strip():
+        return report, False
+    return f"{report.rstrip()}\n\n{patch.lstrip()}", True
+
+
+def _adaptive_style_instruction(report_style: str | None) -> str:
+    style = (report_style or "strategic_report").strip().lower()
+    if style == "consulting_brief":
+        return (
+            "Writing style: consulting brief. Keep sections crisp and executive-friendly, "
+            "prefer concise bullets, include comparison tables for tradeoffs, and avoid long narrative detours."
+        )
+    return (
+        "Writing style: strategic report. Build a coherent narrative from context to evidence to judgement, "
+        "with explicit transitions and synthesis."
+    )
+
+
+def _extract_must_answer_questions(
+    query: str,
+    research_outline: dict[str, Any] | None,
+    user_requirements: str | None,
+) -> list[str]:
+    questions: list[str] = []
+    if isinstance(research_outline, dict):
+        raw_items = research_outline.get("must_answer_questions") or []
+        if isinstance(raw_items, list):
+            for item in raw_items:
+                text = str(item).strip()
+                if text:
+                    questions.append(text)
+    if not questions and query.strip():
+        questions.append(f"What are the most practical recommendations for: {query.strip()}?")
+    requirements = (user_requirements or "").strip()
+    if requirements:
+        questions.append(f"How does the final recommendation satisfy this requirement: {requirements}?")
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in questions:
+        normalized = item.lower().strip()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(item)
+    return deduped[:8]
+
+
 async def _generate_blueprint_report(
     *,
     query: str,
     context: str,
     report_blueprint: dict[str, Any],
     user_requirements: str | None,
+    report_type: str,
+    report_style: str,
+    source_policy: str,
+    must_answer_questions: list[str] | None,
     report_format: str,
     tone: Tone,
     language: str,
@@ -263,6 +658,7 @@ async def _generate_blueprint_report(
         return await _generate_sectional_report(
             query=query,
             context=context,
+            report_type=report_type,
             report_source="web",
             report_format=report_format,
             tone=tone,
@@ -272,6 +668,9 @@ async def _generate_blueprint_report(
             websocket=websocket,
             cost_callback=cost_callback,
             prompt_family=prompt_family,
+            report_blueprint=report_blueprint,
+            must_answer_questions=must_answer_questions,
+            report_style=report_style,
             max_sections=6,
             context_char_limit=DEFAULT_MAX_OUTLINE_CONTEXT_CHARS,
             finish_reason_callback=finish_reason_callback,
@@ -280,6 +679,16 @@ async def _generate_blueprint_report(
 
     trimmed_context = _truncate_text(str(context), DEFAULT_MAX_OUTLINE_CONTEXT_CHARS)
     user_req = (user_requirements or "").strip()
+    style_instruction = _adaptive_style_instruction(report_style)
+    must_answer_questions = must_answer_questions or []
+    must_answer_block = ""
+    if must_answer_questions:
+        must_answer_block = "\n".join([f"- {item}" for item in must_answer_questions if str(item).strip()])
+    must_answer_context_block = (
+        f"Must-answer questions:\n{must_answer_block}"
+        if must_answer_block and report_type == "adaptive_deep"
+        else ""
+    )
     rendered_sections: list[str] = []
     rendered_ids: list[str] = []
 
@@ -304,6 +713,8 @@ Required Evidence Types: {required_evidence or ["cross_source"]}
 Minimum Citations: {min_citations}
 Must Include Elements: {must_include or ["none"]}
 User Requirements: {user_req or "none"}
+Source Policy: {source_policy}
+Report Type: {report_type}
 
 Requirements:
 - Start with exactly: ## {title}
@@ -312,9 +723,12 @@ Requirements:
 - If evidence is conflicting or incomplete, state uncertainty explicitly.
 - Write in {language}, tone: {tone.value}.
 - Avoid repeating content from other sections.
+- {style_instruction}
+{"- If this is a judgement section, explicitly answer all must-answer questions listed below." if report_type == "adaptive_deep" else ""}
 
 Context:
 {trimmed_context}
+{must_answer_context_block}
 """
         section_md = await _generate_report_once(
             cfg=cfg,
@@ -337,6 +751,9 @@ Context:
         return "", {"rendered_sections": 0, "section_order": section_order, "rendered_ids": []}
 
     if not CONCLUSION_SECTION_PATTERN.search(report):
+        conclusion_extra = ""
+        if report_type == "adaptive_deep" and must_answer_block:
+            conclusion_extra = f"\n\nYou MUST explicitly answer these questions in the conclusion:\n{must_answer_block}\n"
         conclusion_text = await create_chat_completion(
             model=cfg.smart_llm_model,
             messages=[
@@ -348,7 +765,7 @@ Context:
                         report_content=report,
                         language=language,
                         report_format=report_format,
-                    ),
+                    ) + conclusion_extra,
                 },
             ],
             temperature=0.25,
@@ -424,6 +841,7 @@ async def _generate_sectional_report(
     *,
     query: str,
     context: str,
+    report_type: str,
     report_source: str,
     report_format: str,
     tone: Tone,
@@ -433,6 +851,9 @@ async def _generate_sectional_report(
     websocket,
     cost_callback: callable,
     prompt_family: type[PromptFamily] | PromptFamily,
+    report_blueprint: dict[str, Any] | None,
+    must_answer_questions: list[str] | None,
+    report_style: str,
     max_sections: int,
     context_char_limit: int,
     finish_reason_callback: Callable[[str | None], None] | None = None,
@@ -443,6 +864,14 @@ async def _generate_sectional_report(
     Used only when full-report generation remains incomplete.
     """
     trimmed_context = _truncate_text(str(context), context_char_limit)
+    style_instruction = _adaptive_style_instruction(report_style)
+    must_answer_questions = must_answer_questions or []
+    must_answer_block = "\n".join([f"- {item}" for item in must_answer_questions if str(item).strip()])
+    must_answer_context_block = (
+        f"Must-answer questions:\n{must_answer_block}"
+        if must_answer_block and report_type == "adaptive_deep"
+        else ""
+    )
     outline_prompt = f"""
 SECTIONAL_OUTLINE_TASK
 Using the context below, produce a concise markdown outline with H2 headings only.
@@ -453,6 +882,8 @@ Return only headings in order, one per line, e.g.:
 Topic: {query}
 Context:
 {trimmed_context}
+Report Type: {report_type}
+{style_instruction}
 """
 
     outline_markdown = await _generate_report_once(
@@ -469,6 +900,14 @@ Context:
     )
 
     section_titles = extract_section_titles_from_outline(outline_markdown, max_sections=max_sections)
+    if report_type == "adaptive_deep" and isinstance(report_blueprint, dict):
+        blueprint_titles = [
+            str(spec.get("title") or "").strip()
+            for spec in (report_blueprint.get("section_specs") or [])
+            if isinstance(spec, dict) and str(spec.get("title") or "").strip()
+        ]
+        if blueprint_titles:
+            section_titles = blueprint_titles[:max_sections]
     if not section_titles:
         section_titles = default_section_titles(language)[:max_sections]
 
@@ -489,9 +928,13 @@ Requirements:
 - Keep this section self-contained and non-duplicative.
 - Write in {language}.
 - Use {tone.value} tone.
+- {style_instruction}
+{"- Explicitly connect each section to evidence quality and uncertainty." if report_type == "adaptive_deep" else ""}
+{"- If this section is judgement/recommendation oriented, answer must-answer questions when relevant." if report_type == "adaptive_deep" else ""}
 
 Context:
 {trimmed_context}
+{must_answer_context_block}
 """
 
         section_md = await _generate_report_once(
@@ -519,6 +962,9 @@ Context:
         require_marker=False,
     )
     if not CONCLUSION_SECTION_PATTERN.search(report):
+        conclusion_extra = ""
+        if report_type == "adaptive_deep" and must_answer_block:
+            conclusion_extra = f"\n\nYou MUST explicitly answer these questions in the conclusion:\n{must_answer_block}\n"
         conclusion_text = await create_chat_completion(
             model=cfg.smart_llm_model,
             messages=[
@@ -530,7 +976,7 @@ Context:
                         report_content=report,
                         language=language,
                         report_format=report_format,
-                    ),
+                    ) + conclusion_extra,
                 },
             ],
             temperature=0.25,
@@ -802,7 +1248,10 @@ async def generate_report(
     prompt_family: type[PromptFamily] | PromptFamily = PromptFamily,
     available_images: list = None,
     report_blueprint: dict | None = None,
+    research_outline: dict | None = None,
     user_requirements: str | None = None,
+    report_style: str = "strategic_report",
+    source_policy: str = "medium_tier",
     generation_metadata_callback: Callable[[dict], None] | None = None,
     **kwargs
 ):
@@ -830,13 +1279,23 @@ async def generate_report(
     available_images = available_images or []
     generate_prompt = get_prompt_by_report_type(report_type, prompt_family)
     report = ""
+    adaptive_mode = report_type == "adaptive_deep"
+    must_answer_questions = _extract_must_answer_questions(
+        query=query,
+        research_outline=research_outline,
+        user_requirements=user_requirements,
+    )
+    adaptive_style_instruction = _adaptive_style_instruction(report_style)
 
     if report_type == "subtopic_report":
         content = f"{generate_prompt(query, existing_headers, relevant_written_contents, main_topic, context, report_format=cfg.report_format, tone=tone, total_words=cfg.total_words, language=cfg.language)}"
     elif custom_prompt:
         content = f"{custom_prompt}\n\nContext: {context}"
     else:
-        content = f"{generate_prompt(query, context, report_source, report_format=cfg.report_format, tone=tone, total_words=cfg.total_words, language=cfg.language)}"
+        if adaptive_mode:
+            content = f"{generate_prompt(query, context, report_source, report_format=cfg.report_format, tone=tone, total_words=cfg.total_words, language=cfg.language, report_style=report_style, must_answer_questions=must_answer_questions, source_policy=source_policy)}"
+        else:
+            content = f"{generate_prompt(query, context, report_source, report_format=cfg.report_format, tone=tone, total_words=cfg.total_words, language=cfg.language)}"
     
     guard_enabled = bool(getattr(cfg, "report_completion_guard_enabled", True))
     guard_max_attempts = max(0, int(getattr(cfg, "report_completion_max_attempts", 2)))
@@ -849,6 +1308,9 @@ async def generate_report(
     sectional_timeout_seconds = max(20, int(getattr(cfg, "report_sectional_timeout_seconds", 120)))
     sectional_fallback_reduced_max_sections = max(2, int(getattr(cfg, "report_sectional_fallback_reduced_max_sections", 4)))
     sectional_fallback_reduced_context_chars = max(5000, int(getattr(cfg, "report_sectional_fallback_reduced_context_chars", 12000)))
+    coverage_enhancer_enabled = bool(getattr(cfg, "adaptive_coverage_enhancer_enabled", False))
+    coverage_min_ratio = max(0.0, min(1.0, float(getattr(cfg, "adaptive_coverage_min_ratio", 0.75))))
+    coverage_profile = str(getattr(cfg, "adaptive_coverage_profile", "balanced") or "balanced").strip().lower()
     require_sections = report_type != "subtopic_report"
     context_text = str(context)
 
@@ -884,6 +1346,24 @@ OUTPUT COMPLETION RULES:
 - You MUST include a references/sources section.
 - End the full report with the exact marker: {REPORT_COMPLETE_MARKER}
 """
+    if adaptive_mode:
+        must_answer_block = "\n".join([f"- {item}" for item in must_answer_questions if str(item).strip()])
+        must_answer_constraint_block = f"Must-answer questions:\n{must_answer_block}" if must_answer_block else ""
+        content += f"""
+
+ADAPTIVE_DEEP_WRITING_CONSTRAINTS:
+- Use adaptive evidence flow: foundation -> evidence -> judgement.
+- Explicitly state conflicts, uncertainty, and unresolved verification items where applicable.
+- Avoid generic methodology-only output that does not answer the research objective.
+- Maintain broad lens coverage (scope, baseline, options, demand/stakeholders, economics, risk/compliance, benchmark, actions).
+- Preserve a coherent chain: macro context -> focal baseline -> demand -> supply/input constraints -> options -> execution.
+- Add embedded "Coverage Check" / "Gap Notes" when some lenses are weakly covered.
+- Include one compact decision table: Option | Expected Value | Feasibility | Main Risk | First Experiment | Go/No-Go Signal.
+- {adaptive_style_instruction}
+- Source policy is `{source_policy}`. Critical conclusions should prioritize higher-trust citations.
+- Reference hygiene: avoid placeholders like "链接/来源/source"; references must be valid markdown links.
+{must_answer_constraint_block}
+"""
 
     finish_reasons: list[str] = []
 
@@ -908,6 +1388,7 @@ OUTPUT COMPLETION RULES:
                 _generate_sectional_report(
                     query=query,
                     context=context_text,
+                    report_type=report_type,
                     report_source=report_source,
                     report_format=cfg.report_format,
                     tone=tone,
@@ -917,6 +1398,9 @@ OUTPUT COMPLETION RULES:
                     websocket=websocket,
                     cost_callback=cost_callback,
                     prompt_family=prompt_family,
+                    report_blueprint=report_blueprint,
+                    must_answer_questions=must_answer_questions,
+                    report_style=report_style,
                     max_sections=sectional_max_sections,
                     context_char_limit=sectional_context_chars,
                     finish_reason_callback=_capture_finish_reason,
@@ -944,6 +1428,10 @@ OUTPUT COMPLETION RULES:
                 context=context_text,
                 report_blueprint=report_blueprint,
                 user_requirements=user_requirements,
+                report_type=report_type,
+                report_style=report_style,
+                source_policy=source_policy,
+                must_answer_questions=must_answer_questions,
                 report_format=cfg.report_format,
                 tone=tone,
                 language=cfg.language,
@@ -997,6 +1485,22 @@ OUTPUT COMPLETION RULES:
         for attempt in range(1, guard_max_attempts + 1):
             continuation_attempts = attempt
             missing_text = ", ".join(missing_requirements) if missing_requirements else "none"
+            adaptive_continuation_rules = ""
+            if adaptive_mode:
+                must_answer_block = "\n".join([f"- {item}" for item in must_answer_questions if str(item).strip()])
+                must_answer_completion_rule = (
+                    f"- Explicitly answer these must-answer questions in the completion:\n{must_answer_block}"
+                    if must_answer_block
+                    else ""
+                )
+                adaptive_continuation_rules = f"""
+- Maintain adaptive structure: foundation evidence, evidence synthesis, judgement and recommendations.
+- Keep evidence quality explicit; do not rely solely on low-tier claims for key conclusions.
+- Preserve narrative chain from macro context to execution actions.
+- Keep references clean: no placeholder entries, use valid markdown links.
+- {adaptive_style_instruction}
+{must_answer_completion_rule}
+"""
             continuation_prompt = f"""
 The prior report appears incomplete or truncated.
 Continue the existing report without repeating already written content.
@@ -1012,6 +1516,7 @@ Rules:
 - Add the missing sections if absent.
 - End your continuation with the exact marker: {REPORT_COMPLETE_MARKER}
 - Return ONLY markdown continuation text to append.
+{adaptive_continuation_rules}
 """
             try:
                 continuation = await _generate_report_once(
@@ -1058,6 +1563,7 @@ Rules:
                 _generate_sectional_report(
                     query=query,
                     context=context_text,
+                    report_type=report_type,
                     report_source=report_source,
                     report_format=cfg.report_format,
                     tone=tone,
@@ -1067,6 +1573,9 @@ Rules:
                     websocket=websocket,
                     cost_callback=cost_callback,
                     prompt_family=prompt_family,
+                    report_blueprint=report_blueprint,
+                    must_answer_questions=must_answer_questions,
+                    report_style=report_style,
                     max_sections=fallback_max_sections,
                     context_char_limit=fallback_context_chars,
                     finish_reason_callback=_capture_finish_reason,
@@ -1103,6 +1612,86 @@ Rules:
 
     marker_present = REPORT_COMPLETE_MARKER in report
     report = _strip_completion_marker(report)
+    coverage_patch_applied = False
+    chain_patch_applied = False
+    adaptive_artifact_patch_applied = False
+    chain_min_ratio = 0.72 if coverage_profile == "high_coverage" else 0.6
+    coverage_report = _evaluate_coverage_lens_report(report) if adaptive_mode else {"ratio": 1.0, "missing_labels": []}
+    chain_report = _evaluate_chain_coverage_report(report) if adaptive_mode else {"ratio": 1.0, "missing_labels": []}
+    if adaptive_mode and coverage_enhancer_enabled and (
+        coverage_report.get("ratio", 0.0) < coverage_min_ratio
+        or chain_report.get("ratio", 0.0) < chain_min_ratio
+    ):
+        report, coverage_patch_applied = await _patch_coverage_gaps_once(
+            report=report,
+            query=query,
+            context=context_text,
+            missing_lenses=list(coverage_report.get("missing_labels") or []),
+            missing_chain_steps=list(chain_report.get("missing_labels") or []),
+            language=cfg.language,
+            tone=tone,
+            source_policy=source_policy,
+            adaptive_style_instruction=adaptive_style_instruction,
+            cfg=cfg,
+            agent_role_prompt=agent_role_prompt,
+            websocket=websocket,
+            cost_callback=cost_callback,
+            finish_reason_callback=_capture_finish_reason,
+            **kwargs,
+        )
+        coverage_report = _evaluate_coverage_lens_report(report)
+        chain_report = _evaluate_chain_coverage_report(report)
+        chain_patch_applied = True
+
+    missing_coverage_check = not bool(COVERAGE_CHECK_PATTERN.search(report or ""))
+    missing_decision_sheet = not bool(DECISION_SHEET_PATTERN.search(report or ""))
+    if adaptive_mode and (missing_coverage_check or missing_decision_sheet):
+        report, adaptive_artifact_patch_applied = await _patch_adaptive_artifacts_once(
+            report=report,
+            query=query,
+            context=context_text,
+            language=cfg.language,
+            tone=tone,
+            source_policy=source_policy,
+            adaptive_style_instruction=adaptive_style_instruction,
+            cfg=cfg,
+            agent_role_prompt=agent_role_prompt,
+            websocket=websocket,
+            cost_callback=cost_callback,
+            finish_reason_callback=_capture_finish_reason,
+            **kwargs,
+        )
+        missing_coverage_check = not bool(COVERAGE_CHECK_PATTERN.search(report or ""))
+        missing_decision_sheet = not bool(DECISION_SHEET_PATTERN.search(report or ""))
+        coverage_report = _evaluate_coverage_lens_report(report)
+        chain_report = _evaluate_chain_coverage_report(report)
+
+    coverage_ratio = float(coverage_report.get("ratio", 0.0))
+    coverage_missing_lenses = list(coverage_report.get("missing_labels") or [])
+    coverage_ok = coverage_ratio >= coverage_min_ratio if (adaptive_mode and coverage_enhancer_enabled) else True
+    chain_coverage_ratio = float(chain_report.get("ratio", 0.0)) if adaptive_mode else 1.0
+    chain_missing_steps = list(chain_report.get("missing_labels") or []) if adaptive_mode else []
+    chain_coverage_ok = (
+        chain_coverage_ratio >= chain_min_ratio if (adaptive_mode and coverage_enhancer_enabled) else True
+    )
+
+    reference_hygiene_meta = {
+        "reference_url_count": 0,
+        "reference_hygiene_changed": False,
+        "reference_had_existing_section": False,
+    }
+    report_source_normalized = str(report_source or "").strip().lower()
+    if "web" in report_source_normalized:
+        report, reference_hygiene_meta = _sanitize_reference_hygiene(
+            report,
+            cfg.language,
+            extra_context=context_text,
+        )
+
+    goal_alignment_ok = True
+    goal_alignment_issues: list[str] = []
+    if adaptive_mode:
+        goal_alignment_ok, goal_alignment_issues = evaluate_goal_alignment(report, query)
     blueprint_coverage_ok = True
     blueprint_missing_sections: list[str] = []
     if report_blueprint:
@@ -1129,6 +1718,26 @@ Rules:
                 "blueprint_generation": blueprint_meta,
                 "blueprint_coverage_ok": blueprint_coverage_ok,
                 "blueprint_missing_sections": blueprint_missing_sections,
+                "goal_alignment_ok": goal_alignment_ok,
+                "goal_alignment_issues": goal_alignment_issues,
+                "coverage_enhancer_enabled": coverage_enhancer_enabled,
+                "coverage_profile": coverage_profile,
+                "coverage_min_ratio": coverage_min_ratio,
+                "coverage_ratio": coverage_ratio,
+                "coverage_ok": coverage_ok,
+                "coverage_missing_lenses": coverage_missing_lenses,
+                "coverage_patch_applied": coverage_patch_applied,
+                "chain_min_ratio": chain_min_ratio,
+                "chain_coverage_ratio": chain_coverage_ratio,
+                "chain_coverage_ok": chain_coverage_ok,
+                "chain_missing_steps": chain_missing_steps,
+                "chain_patch_applied": chain_patch_applied,
+                "adaptive_artifact_patch_applied": adaptive_artifact_patch_applied,
+                "missing_coverage_check": missing_coverage_check,
+                "missing_decision_sheet": missing_decision_sheet,
+                "report_style": report_style,
+                "source_policy": source_policy,
+                "reference_hygiene": reference_hygiene_meta,
             }
         )
 

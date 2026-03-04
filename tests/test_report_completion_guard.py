@@ -2,6 +2,9 @@ import asyncio
 from types import SimpleNamespace
 
 from gpt_researcher.actions import report_generation
+from gpt_researcher.config import Config
+from gpt_researcher.prompts import PromptFamily, get_prompt_by_report_type, report_type_mapping
+from gpt_researcher.utils.enum import ReportType
 from gpt_researcher.utils.enum import Tone
 
 
@@ -17,6 +20,18 @@ Some summary text.
     )
     assert not complete
     assert "trailing_header_without_content" in missing
+
+
+def test_prompt_routing_deep_and_adaptive_are_decoupled():
+    assert report_type_mapping[ReportType.DeepResearch.value] == "generate_deep_research_prompt"
+    assert report_type_mapping[ReportType.AdaptiveDeepResearch.value] == "generate_adaptive_deep_research_prompt"
+
+    prompt_family = PromptFamily(Config())
+    deep_prompt = get_prompt_by_report_type(ReportType.DeepResearch.value, prompt_family)
+    adaptive_prompt = get_prompt_by_report_type(ReportType.AdaptiveDeepResearch.value, prompt_family)
+
+    assert deep_prompt.__name__ == "generate_deep_research_prompt"
+    assert adaptive_prompt.__name__ == "generate_adaptive_deep_research_prompt"
 
 
 def test_generate_report_auto_continuation(monkeypatch):

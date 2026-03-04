@@ -116,6 +116,8 @@ class WebSocketManager:
         report_blueprint=None,
         outline_locked=False,
         user_requirements=None,
+        report_style: str = "strategic_report",
+        source_policy: str = "medium_tier",
     ):
         """Start streaming the output."""
         tone = Tone[tone]
@@ -132,6 +134,8 @@ class WebSocketManager:
             report_blueprint=report_blueprint,
             outline_locked=outline_locked,
             user_requirements=user_requirements,
+            report_style=report_style,
+            source_policy=source_policy,
         )
         return report
 
@@ -156,6 +160,8 @@ async def run_agent(
     report_blueprint=None,
     outline_locked=False,
     user_requirements=None,
+    report_style: str = "strategic_report",
+    source_policy: str = "medium_tier",
 ):
     """Run the agent."""    
     # Create logs handler for this research task
@@ -228,6 +234,8 @@ async def run_agent(
             report_blueprint=report_blueprint,
             outline_locked=outline_locked,
             user_requirements=user_requirements,
+            report_style=report_style,
+            source_policy=source_policy,
         )
         report = await researcher.run()
 

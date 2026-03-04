@@ -84,6 +84,8 @@ class GPTResearcher:
         report_blueprint: dict[str, Any] | None = None,
         outline_locked: bool = False,
         user_requirements: str | None = None,
+        report_style: str | None = None,
+        source_policy: str | None = None,
         **kwargs
     ):
         """
@@ -175,6 +177,8 @@ class GPTResearcher:
         self.report_blueprint = report_blueprint
         self.outline_locked = bool(outline_locked)
         self.user_requirements = user_requirements
+        self.report_style = (report_style or getattr(self.cfg, "report_style", "strategic_report") or "strategic_report").strip()
+        self.source_policy = (source_policy or getattr(self.cfg, "source_policy", "medium_tier") or "medium_tier").strip()
         
         # Process MCP configurations if provided
         self.mcp_configs = mcp_configs

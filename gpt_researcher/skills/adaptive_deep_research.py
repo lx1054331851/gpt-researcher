@@ -30,6 +30,12 @@ from gpt_researcher.orchestration import (
     build_resolution_queries,
     detect_conflicts,
 )
+from gpt_researcher.orchestration.coverage_lenses import (
+    assess_chain_coverage,
+    assess_text_coverage,
+    coverage_chain_prompt_block,
+    coverage_lens_prompt_block,
+)
 
 from ..actions.query_processing import get_search_results
 from ..utils.llm import create_chat_completion
@@ -126,6 +132,14 @@ class AdaptiveDeepResearchSkill:
         self.tavily_advanced_enabled = getattr(self.cfg, "tavily_advanced_enabled", False)
         self.max_branch_queries = getattr(self.cfg, "rabbit_hole_max_queries_per_branch", 3)
         self.max_branches = getattr(self.cfg, "rabbit_hole_max_branches", 2)
+        self.source_policy = str(getattr(researcher, "source_policy", "medium_tier") or "medium_tier").strip().lower()
+        if self.source_policy not in {"strict_tier", "medium_tier", "broad_collect"}:
+            self.source_policy = "medium_tier"
+        self.coverage_enhancer_enabled = bool(getattr(self.cfg, "adaptive_coverage_enhancer_enabled", False))
+        self.coverage_min_ratio = max(0.0, min(1.0, float(getattr(self.cfg, "adaptive_coverage_min_ratio", 0.75))))
+        self.coverage_profile = str(getattr(self.cfg, "adaptive_coverage_profile", "balanced") or "balanced").strip().lower()
+        if self.coverage_profile not in {"balanced", "high_coverage"}:
+            self.coverage_profile = "balanced"
 
         self.entropy_tracker = EntropyTracker(min_gain=self.entropy_min_gain, patience=2)
         self.saliency_detector = SaliencyDetector(self.saliency_threshold)
@@ -157,7 +171,7 @@ class AdaptiveDeepResearchSkill:
         self.failed_domains: Counter[str] = Counter()
         self.blocked_domains: set[str] = set()
         self.claim_ledger: list[dict[str, Any]] = []
-        self.diagnostics: dict[str, int] = {
+        self.diagnostics: dict[str, Any] = {
             "dimension_planning_fallbacks": 0,
             "query_matrix_fallbacks": 0,
             "claim_extraction_fallbacks": 0,
@@ -167,6 +181,12 @@ class AdaptiveDeepResearchSkill:
             "repeated_failure_stops": 0,
             "blocked_domains": 0,
             "run_timeout_stops": 0,
+            "coverage_ratio": 0.0,
+            "coverage_missing_lenses_count": 0,
+            "coverage_missing_lenses": [],
+            "chain_coverage_ratio": 0.0,
+            "chain_missing_steps_count": 0,
+            "chain_missing_steps": [],
         }
 
     async def run(self, on_progress=None) -> str:
@@ -184,6 +204,15 @@ class AdaptiveDeepResearchSkill:
         if not graph.nodes:
             dimensions = await self._plan_dimensions(self.researcher.query)
             graph = build_default_task_graph(self.researcher.query, dimensions)
+
+        coverage = assess_text_coverage(dimensions or [])
+        self.diagnostics["coverage_ratio"] = coverage.get("ratio", 0.0)
+        self.diagnostics["coverage_missing_lenses_count"] = len(coverage.get("missing_ids") or [])
+        self.diagnostics["coverage_missing_lenses"] = list(coverage.get("missing_labels") or [])
+        chain_coverage = assess_chain_coverage(dimensions or [])
+        self.diagnostics["chain_coverage_ratio"] = chain_coverage.get("ratio", 0.0)
+        self.diagnostics["chain_missing_steps_count"] = len(chain_coverage.get("missing_ids") or [])
+        self.diagnostics["chain_missing_steps"] = list(chain_coverage.get("missing_labels") or [])
 
         if isinstance(self.locked_outline, dict):
             self.trace.set_outline(self.locked_outline)
@@ -243,6 +272,11 @@ class AdaptiveDeepResearchSkill:
         self.diagnostics["blocked_domains"] = len(self.blocked_domains)
         self.trace.set_diagnostics(self.diagnostics.copy())
         self.claim_ledger = self._build_claim_ledger()
+        failed_core_claims = [item for item in self.claim_ledger if not bool(item.get("policy_pass"))]
+        if failed_core_claims:
+            self.research_journal["pending"].append(
+                f"{len(failed_core_claims)} core conclusions do not satisfy source policy `{self.source_policy}`."
+            )
         self.trace.set_claim_ledger(self.claim_ledger)
         self.trace.set_citation_coverage(self._compute_citation_coverage())
 
@@ -696,13 +730,52 @@ class AdaptiveDeepResearchSkill:
             if len(selected) >= self.max_sources_per_query:
                 break
 
+        selected = self._apply_low_quality_downsampling(selected, search_results)
         return selected if selected else search_results[: self.max_sources_per_query]
+
+    def _apply_low_quality_downsampling(
+        self,
+        selected: list[dict[str, Any]],
+        fallback_results: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if not selected:
+            return selected
+        if self.source_policy == "broad_collect":
+            return selected
+
+        total = len(selected)
+        if self.source_policy == "strict_tier":
+            max_low_quality = 0
+        else:
+            max_low_quality = max(1, math.floor(total * 0.35))
+
+        low_quality_seen = 0
+        filtered: list[dict[str, Any]] = []
+        for result in selected:
+            url = str(result.get("href") or result.get("url") or "")
+            domain = self._domain_from_url(url)
+            is_low_quality = bool(domain and domain in self.low_quality_domains)
+            if is_low_quality:
+                if low_quality_seen >= max_low_quality:
+                    continue
+                low_quality_seen += 1
+            filtered.append(result)
+
+        if filtered:
+            return filtered[: self.max_sources_per_query]
+        return fallback_results[: self.max_sources_per_query]
 
     async def _plan_dimensions(self, query: str) -> list[str]:
         if self.locked_outline and isinstance(self.locked_outline, dict):
             sections = self.locked_outline.get("sections") or []
             locked_dimensions = [
-                str(section.get("title") or section.get("intent") or "").strip()
+                " | ".join(
+                    [
+                        str(section.get("title") or "").strip(),
+                        str(section.get("intent") or "").strip(),
+                        " ".join(section.get("key_questions") or []) if isinstance(section.get("key_questions"), list) else "",
+                    ]
+                ).strip(" |")
                 for section in sections
                 if isinstance(section, dict)
             ]
@@ -710,12 +783,22 @@ class AdaptiveDeepResearchSkill:
             if locked_dimensions:
                 return locked_dimensions[: self.max_dimensions]
 
+        dim_range = "8-12" if self.coverage_profile == "high_coverage" else "6-10"
         prompt = f"""
-You are planning a research DAG. Create 6-10 concise research dimensions for:
+You are planning a research DAG. Create {dim_range} concise, orthogonal research dimensions for:
 {query}
 
+Coverage lenses to maximize breadth:
+{coverage_lens_prompt_block()}
+
+Coverage chain to preserve narrative completeness:
+{coverage_chain_prompt_block()}
+
 Requirements:
-- Cover background, current state, data/evidence, risks/controversies, trends, and recommendations.
+- Dimensions must be mutually distinct (avoid near-duplicate wording).
+- Avoid single-angle plans (for example only technical or only market).
+- Include both evidence collection and execution-oriented dimensions.
+- Ensure the set can support a coherent chain from macro context -> focal objective -> demand -> supply/constraints -> options -> execution.
 - Return a JSON list of strings only.
 """
         try:
@@ -739,14 +822,18 @@ Requirements:
             self.diagnostics["dimension_planning_fallbacks"] += 1
             logger.warning(f"Dimension planning fallback triggered: {exc}")
 
-        return [
-            f"Background and definitions for {query}",
-            f"Current state and technical landscape of {query}",
-            f"Evidence and quantitative indicators for {query}",
-            f"Competing viewpoints and controversies around {query}",
-            f"Risk assessment and limitations for {query}",
-            f"Decision implications and recommendations for {query}",
+        fallback_dimensions = [
+            f"Macro context and external trajectory for {query}",
+            f"Focal target positioning and baseline evidence for {query}",
+            f"Stakeholder demand and user signals for {query}",
+            f"Supply/input constraints and enabling infrastructure for {query}",
+            f"Economics and operational feasibility for {query}",
+            f"Risk, compliance, and uncertainty for {query}",
+            f"Option space with comparative tradeoffs for {query}",
+            f"Competition and external benchmarks for {query}",
+            f"Roadmap, pilot milestones, and next actions for {query}",
         ]
+        return fallback_dimensions[: self.max_dimensions]
 
     async def _generate_query_matrix(self, node: TaskNode, round_index: int) -> list[str]:
         prompt = f"""
@@ -754,8 +841,20 @@ Generate up to {self.breadth} search queries for this research node.
 Node: {node.title}
 Description: {node.description}
 Round: {round_index}
+Overall research objective: {self.researcher.query}
 
-Use mixed query intents: factual, comparative, counter-evidence, latest developments, and source verification.
+Use mixed query intents across:
+- factual baseline and definitions
+- comparative options and tradeoffs
+- counter-evidence or conflicting claims
+- economics and operational feasibility
+- risk/compliance or policy constraints
+- implementation examples and roadmap signals
+- latest developments and source verification
+- macro context signals, focal-target evidence, stakeholder demand, and supply/input constraints
+
+Do not output only one intent type.
+Every query must remain explicitly tied to the overall research objective, not just the node title.
 Return a JSON list of strings only.
 """
         try:
@@ -781,10 +880,12 @@ Return a JSON list of strings only.
         return self._fallback_queries(node)
 
     def _fallback_queries(self, node: TaskNode) -> list[str]:
+        topic = str(self.researcher.query or "").strip()
         return [
-            f"{node.title} latest updates",
-            f"{node.title} data and statistics",
-            f"{node.title} alternative viewpoints",
+            f"{topic} macro trends and latest baseline updates",
+            f"{topic} {node.title} stakeholder demand and benchmark comparison",
+            f"{topic} {node.title} supply chain constraints cost capacity and compliance risks",
+            f"{topic} {node.title} implementation cases milestones and decision gates",
         ][: min(self.breadth, self.max_queries_per_round)]
 
     async def _extract_claims(
@@ -983,17 +1084,50 @@ Return JSON list with:
             is_conflict = claim.lower() in conflict_claim_text
             conflict_status = "open" if is_conflict else "none"
             resolution_note = "Potential contradiction detected and requires adjudication." if is_conflict else ""
+            tier_counts = {
+                "T1": sum(1 for tier in tiers if tier == "T1"),
+                "T2": sum(1 for tier in tiers if tier == "T2"),
+                "T3": sum(1 for tier in tiers if tier == "T3"),
+            }
+            policy_pass, policy_reason = self._evaluate_claim_source_policy(anchors)
             ledger.append(
                 {
                     "claim_text": claim,
                     "anchors": anchors,
                     "source_tier": best_tier,
                     "confidence": round(confidence, 3),
+                    "is_core_conclusion": True,
+                    "source_policy": self.source_policy,
+                    "policy_pass": policy_pass,
+                    "policy_reason": policy_reason,
+                    "tier_counts": tier_counts,
                     "conflict_status": conflict_status,
                     "resolution_note": resolution_note,
                 }
             )
         return ledger
+
+    def _evaluate_claim_source_policy(self, anchors: list[dict[str, Any]]) -> tuple[bool, str]:
+        if not anchors:
+            return False, "missing_anchor"
+
+        tiers = [str(anchor.get("source_tier") or "T3") for anchor in anchors]
+        t1_count = sum(1 for tier in tiers if tier == "T1")
+        t2_count = sum(1 for tier in tiers if tier == "T2")
+
+        if self.source_policy == "strict_tier":
+            if t1_count < 1:
+                return False, "strict_tier_requires_t1_anchor"
+            if len(anchors) < 2:
+                return False, "strict_tier_requires_multi_anchor"
+            return True, "ok"
+
+        if self.source_policy == "medium_tier":
+            if (t1_count + t2_count) < 1:
+                return False, "medium_tier_requires_t1_or_t2_anchor"
+            return True, "ok"
+
+        return True, "ok"
 
     def _compute_citation_coverage(self) -> dict[str, Any]:
         total_claims = len(self.claim_to_anchors)
@@ -1007,11 +1141,28 @@ Return JSON list with:
             if tier not in by_tier:
                 tier = "T3"
             by_tier[tier] += 1
+        core_claims = [item for item in self.claim_ledger if bool(item.get("is_core_conclusion"))]
+        core_policy_pass = sum(1 for item in core_claims if bool(item.get("policy_pass")))
+        core_policy_fail_examples = [
+            {
+                "claim_text": item.get("claim_text"),
+                "policy_reason": item.get("policy_reason"),
+                "source_tier": item.get("source_tier"),
+            }
+            for item in core_claims
+            if not bool(item.get("policy_pass"))
+        ][:10]
         return {
             "core_claims_total": total_claims,
             "core_claims_with_anchor": anchored_claims,
             "coverage_ratio": round(ratio, 4),
             "by_tier": by_tier,
+            "source_policy": self.source_policy,
+            "core_conclusion_policy_total": len(core_claims),
+            "core_conclusion_policy_passed": core_policy_pass,
+            "core_conclusion_policy_failed": max(0, len(core_claims) - core_policy_pass),
+            "core_conclusion_policy_coverage": round(core_policy_pass / max(1, len(core_claims)), 4),
+            "core_conclusion_policy_fail_examples": core_policy_fail_examples,
         }
 
     def _build_final_context(self) -> list[str]:

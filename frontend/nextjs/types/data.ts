@@ -43,6 +43,17 @@ export interface ResearchOutlineData {
   outline_id: string;
   query: string;
   objective: string;
+  scope?: string;
+  workstreams?: Array<{
+    id: string;
+    title: string;
+    intent: string;
+    deliverable?: string;
+  }>;
+  evidence_requirements?: string[];
+  deliverables?: string[];
+  risk_controls?: string[];
+  must_answer_questions?: string[];
   audience?: string | null;
   constraints: string[];
   sections: OutlineSectionData[];
@@ -72,6 +83,8 @@ export interface OutlineDraftData extends BaseData {
   outline_id: string;
   outline: ResearchOutlineData;
   report_blueprint: ReportBlueprintData;
+  report_style?: "strategic_report" | "consulting_brief";
+  source_policy?: "strict_tier" | "medium_tier" | "broad_collect";
 }
 
 export interface OutlineUpdatedData extends BaseData {
@@ -80,6 +93,14 @@ export interface OutlineUpdatedData extends BaseData {
   outline_id: string;
   outline: ResearchOutlineData;
   report_blueprint: ReportBlueprintData;
+  report_style?: "strategic_report" | "consulting_brief";
+  source_policy?: "strict_tier" | "medium_tier" | "broad_collect";
+}
+
+export interface PathData extends BaseData {
+  type: 'path';
+  content?: string;
+  output?: Record<string, any>;
 }
 
 export type Data =
@@ -89,7 +110,8 @@ export type Data =
   | QuestionData
   | ChatData
   | OutlineDraftData
-  | OutlineUpdatedData;
+  | OutlineUpdatedData
+  | PathData;
 
 export interface MCPConfig {
   name: string;
@@ -103,6 +125,8 @@ export interface ChatBoxSettings {
   report_source: string;
   tone: string;
   report_language: string;
+  report_style: "strategic_report" | "consulting_brief";
+  source_policy: "strict_tier" | "medium_tier" | "broad_collect";
   word_fonts?: string[];
   domains: string[];
   defaultReportType: string;

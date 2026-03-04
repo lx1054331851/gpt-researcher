@@ -176,10 +176,24 @@ def test_websocket_two_stage_plan_flow(monkeypatch):
     manager = SimpleNamespace()
     outline_session = {}
 
-    async def fake_generate_outline(query, user_requirements=None, language=None, cfg=None):
+    async def fake_generate_outline(
+        query,
+        user_requirements=None,
+        language=None,
+        report_style=None,
+        source_policy=None,
+        cfg=None,
+    ):
         return outline, blueprint
 
-    async def fake_revise_outline(outline_obj, instruction, language=None, cfg=None):
+    async def fake_revise_outline(
+        outline_obj,
+        instruction,
+        language=None,
+        report_style=None,
+        source_policy=None,
+        cfg=None,
+    ):
         revised = ResearchOutline.from_dict(
             {
                 **outline_obj.to_dict(),
@@ -204,6 +218,8 @@ def test_websocket_two_stage_plan_flow(monkeypatch):
         "report_source": "web",
         "tone": "Objective",
         "language": "english",
+        "report_style": "consulting_brief",
+        "source_policy": "medium_tier",
         "query_domains": [],
         "mcp_enabled": False,
         "mcp_strategy": "fast",
@@ -218,6 +234,8 @@ def test_websocket_two_stage_plan_flow(monkeypatch):
         )
     )
     assert ws.json_messages[-1]["type"] == "outline_draft"
+    assert ws.json_messages[-1]["report_style"] == "consulting_brief"
+    assert ws.json_messages[-1]["source_policy"] == "medium_tier"
     outline_id = ws.json_messages[-1]["outline_id"]
 
     revise_payload = {"outline_id": outline_id, "mode": "ai_rewrite", "instruction": "make it concise"}
@@ -242,3 +260,124 @@ def test_websocket_two_stage_plan_flow(monkeypatch):
     assert captured_execute.get("outline_locked") is True
     assert captured_execute.get("research_outline", {}).get("outline_id") == outline_id
     assert "report_blueprint" in captured_execute
+    assert captured_execute.get("start_payload", {}).get("report_style") == "consulting_brief"
+
+
+def test_execute_plan_blocks_invalid_outline_and_returns_validation_error(monkeypatch):
+    outline = _make_outline(query="AI datacenter strategy 2027")
+    blueprint = build_blueprint_from_outline(outline)
+    ws = FakeWebSocket()
+    manager = SimpleNamespace()
+    outline_session = {}
+
+    async def fake_generate_outline(
+        query,
+        user_requirements=None,
+        language=None,
+        report_style=None,
+        source_policy=None,
+        cfg=None,
+    ):
+        return outline, blueprint
+
+    started = {"called": False}
+
+    async def fake_handle_start_command(websocket, data, manager_obj, **kwargs):
+        started["called"] = True
+
+    monkeypatch.setattr(server_utils, "generate_outline", fake_generate_outline)
+    monkeypatch.setattr(server_utils, "handle_start_command", fake_handle_start_command)
+
+    asyncio.run(
+        server_utils.handle_start_plan_command(
+            ws,
+            "start_plan " + json.dumps(
+                {
+                    "task": "AI datacenter strategy 2027",
+                    "report_type": "adaptive_deep",
+                    "report_source": "web",
+                    "tone": "Objective",
+                }
+            ),
+            manager,
+            outline_session,
+        )
+    )
+    outline_id = ws.json_messages[-1]["outline_id"]
+
+    invalid_outline = outline.to_dict()
+    invalid_outline["workstreams"] = [
+        {
+            "id": "ws-x",
+            "title": "Unrelated gardening stream",
+            "intent": "Plant flowers",
+            "deliverable": "Garden notes",
+        }
+    ]
+    invalid_outline["deliverables"] = ["Background notes only"]
+
+    asyncio.run(
+        server_utils.handle_execute_plan_command(
+            ws,
+            "execute_plan " + json.dumps(
+                {
+                    "outline_id": outline_id,
+                    "approved_outline": invalid_outline,
+                }
+            ),
+            manager,
+            outline_session,
+        )
+    )
+
+    assert started["called"] is False
+    assert ws.json_messages[-1]["type"] == "outline_validation_error"
+    assert "deliverables" in ws.json_messages[-1]["output"].lower()
+
+
+def test_adaptive_trace_diagnostics_include_coverage_fields(monkeypatch):
+    researcher = SimpleNamespace(
+        cfg=SimpleNamespace(
+            adaptive_coverage_enhancer_enabled=True,
+            adaptive_coverage_min_ratio=0.75,
+            adaptive_coverage_profile="high_coverage",
+        ),
+        websocket=None,
+        headers={},
+        query_domains=[],
+        retrievers=[],
+        query="coverage diagnostics test",
+        visited_urls=set(),
+        research_sources=[],
+        scraper_manager=None,
+        add_research_sources=lambda sources: None,
+        context="",
+        research_trace={},
+        research_outline=None,
+        report_blueprint=None,
+        user_requirements="",
+    )
+    skill = AdaptiveDeepResearchSkill(researcher)
+
+    async def fake_plan_dimensions(_query):
+        return [
+            "Problem framing and scope constraints",
+            "Current state and baseline evidence",
+            "Option comparison and tradeoffs",
+            "Stakeholder demand signals",
+            "Economics and feasibility",
+            "Risk and compliance uncertainty",
+            "Competition benchmarks",
+            "Roadmap priorities and actions",
+        ]
+
+    async def fake_process_node(node, depth_count, progress, graph, on_progress=None, deadline_ts=None):
+        return "completed"
+
+    monkeypatch.setattr(skill, "_plan_dimensions", fake_plan_dimensions)
+    monkeypatch.setattr(skill, "_process_node", fake_process_node)
+
+    asyncio.run(skill.run())
+    diagnostics = researcher.research_trace.get("diagnostics", {})
+    assert "coverage_ratio" in diagnostics
+    assert "coverage_missing_lenses_count" in diagnostics

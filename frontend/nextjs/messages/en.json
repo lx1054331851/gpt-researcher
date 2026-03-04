@@ -61,6 +61,17 @@
     "wordFontsPlaceholder": "e.g. 仿宋, FangSong, STFangsong",
     "wordFontsHelp": "Enter multiple fonts separated by commas; they are used in priority order.",
     "toneLabel": "Tone",
+    "reportStyleLabel": "Adaptive Style",
+    "reportStyle": {
+      "strategicReport": "Strategic Report",
+      "consultingBrief": "Consulting Brief"
+    },
+    "sourcePolicyLabel": "Source Policy",
+    "sourcePolicy": {
+      "strictTier": "Strict Tier",
+      "mediumTier": "Medium Tier",
+      "broadCollect": "Broad Collect"
+    },
     "toneOptions": {
       "Objective": "Objective",
       "Formal": "Formal",

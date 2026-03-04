@@ -100,6 +100,8 @@ export const useWebSocket = (
           report_source,
           tone,
           report_language,
+          report_style,
+          source_policy,
           word_fonts,
           mcp_enabled,
           mcp_configs,
@@ -115,6 +117,8 @@ export const useWebSocket = (
             report_source, 
             tone,
             language: report_language || "chinese",
+            report_style: report_style || "strategic_report",
+            source_policy: source_policy || "medium_tier",
             word_fonts: word_fonts?.length ? word_fonts : ["仿宋", "FangSong", "STFangsong"],
             query_domains: domains,
             mcp_enabled: mcp_enabled || false,
@@ -144,6 +148,14 @@ export const useWebSocket = (
           
           if (data.type === 'error') {
             console.error(`Server error: ${data.output}`);
+            setLoading(false);
+            const contentAndType = `${data.content}-${data.type}`;
+            setOrderedData((prevOrder) => [...prevOrder, { ...data, contentAndType }]);
+          } else if (data.type === 'outline_validation_error') {
+            console.warn(`Outline validation error: ${data.output}`);
+            setLoading(false);
+            const contentAndType = `${data.content}-${data.type}`;
+            setOrderedData((prevOrder) => [...prevOrder, { ...data, contentAndType }]);
           } else if (data.type === 'human_feedback' && data.content === 'request') {
             setQuestionForHuman(data.output);
             setShowHumanFeedback(true);

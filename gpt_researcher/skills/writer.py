@@ -45,7 +45,10 @@ class ReportGenerator:
             "cfg": self.researcher.cfg,
             "headers": self.researcher.headers,
             "report_blueprint": self.researcher.report_blueprint,
+            "research_outline": self.researcher.research_outline,
             "user_requirements": self.researcher.user_requirements,
+            "report_style": getattr(self.researcher, "report_style", "strategic_report"),
+            "source_policy": getattr(self.researcher, "source_policy", "medium_tier"),
         }
 
     async def write_report(self, existing_headers: list = [], relevant_written_contents: list = [], ext_context=None, custom_prompt="", available_images: list = None) -> str:

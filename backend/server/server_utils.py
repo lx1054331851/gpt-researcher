@@ -43,6 +43,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_REPORT_STYLES = {"strategic_report", "consulting_brief"}
+ALLOWED_SOURCE_POLICIES = {"strict_tier", "medium_tier", "broad_collect"}
+
 
 def _is_ws_closed_error(exc: Exception) -> bool:
     message = str(exc).lower()
@@ -217,6 +220,8 @@ def _serialize_outline_payload(
     blueprint: ReportBlueprint,
     *,
     message_type: str,
+    report_style: str = "strategic_report",
+    source_policy: str = "medium_tier",
 ) -> dict[str, Any]:
     return {
         "type": message_type,
@@ -224,12 +229,100 @@ def _serialize_outline_payload(
         "outline_id": outline.outline_id,
         "outline": outline.to_dict(),
         "report_blueprint": blueprint.to_dict(),
+        "report_style": report_style,
+        "source_policy": source_policy,
         "output": {
             "outline_id": outline.outline_id,
             "outline": outline.to_dict(),
             "report_blueprint": blueprint.to_dict(),
+            "report_style": report_style,
+            "source_policy": source_policy,
         },
     }
+
+
+def _normalize_report_style(raw_value: Any) -> str:
+    value = str(raw_value or "strategic_report").strip().lower()
+    return value if value in ALLOWED_REPORT_STYLES else "strategic_report"
+
+
+def _normalize_source_policy(raw_value: Any) -> str:
+    value = str(raw_value or "medium_tier").strip().lower()
+    return value if value in ALLOWED_SOURCE_POLICIES else "medium_tier"
+
+
+def _extract_query_keywords(query: str) -> list[str]:
+    raw_tokens = re.findall(r"[\u4e00-\u9fff]{2,}|[A-Za-z][A-Za-z0-9_-]{2,}", str(query or ""))
+    stopwords = {
+        "what", "when", "where", "which", "who", "why", "how", "the", "and", "for", "with",
+        "from", "that", "this", "are", "was", "were", "will", "into", "about", "research",
+        "report", "analysis", "deep", "adaptive",
+        "什么", "如何", "哪些", "以及", "关于", "研究", "报告", "分析",
+    }
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for token in raw_tokens:
+        key = token.strip().lower()
+        if not key or key in stopwords:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(token.strip())
+    return deduped[:12]
+
+
+def _outline_text_for_alignment(outline: ResearchOutline) -> str:
+    parts: list[str] = []
+    parts.extend([outline.query, outline.objective, getattr(outline, "scope", "")])
+    for ws in getattr(outline, "workstreams", []) or []:
+        if isinstance(ws, dict):
+            parts.extend(
+                [
+                    str(ws.get("title") or ""),
+                    str(ws.get("intent") or ""),
+                    str(ws.get("deliverable") or ""),
+                ]
+            )
+        else:
+            parts.append(str(ws))
+    return " ".join(parts).lower()
+
+
+def _contains_recommendation_deliverable(outline: ResearchOutline) -> bool:
+    deliverables = [str(item).strip().lower() for item in (getattr(outline, "deliverables", []) or []) if str(item).strip()]
+    if not deliverables:
+        return False
+    recommendation_tokens = (
+        "recommend", "recommendation", "action", "roadmap", "strategy", "proposal", "plan",
+        "建议", "行动", "路线图", "策略", "方案", "落地", "优先级",
+    )
+    return any(any(token in item for token in recommendation_tokens) for item in deliverables)
+
+
+def _validate_outline_for_execution(outline: ResearchOutline, query: str) -> list[str]:
+    errors: list[str] = []
+
+    stage_set = {section.stage for section in outline.sections}
+    missing_stages = [stage for stage in ("foundation", "evidence", "judgement") if stage not in stage_set]
+    if missing_stages:
+        errors.append(f"Missing required section stages: {', '.join(missing_stages)}")
+
+    workstreams = getattr(outline, "workstreams", []) or []
+    if not workstreams:
+        errors.append("workstreams must not be empty.")
+    else:
+        keywords = _extract_query_keywords(query or outline.query)
+        if keywords:
+            plan_text = _outline_text_for_alignment(outline)
+            matched = [kw for kw in keywords if kw.lower() in plan_text]
+            if not matched:
+                errors.append("workstreams do not appear aligned with query keywords.")
+
+    if not _contains_recommendation_deliverable(outline):
+        errors.append("deliverables must include concrete recommendation output.")
+
+    return errors
 
 
 async def handle_start_command(
@@ -258,6 +351,8 @@ async def handle_start_command(
         mcp_strategy,
         mcp_configs,
         word_fonts,
+        report_style,
+        source_policy,
     ) = extract_command_data(json_data)
 
     if not task or not report_type:
@@ -294,6 +389,8 @@ async def handle_start_command(
         report_blueprint=report_blueprint,
         outline_locked=outline_locked,
         user_requirements=user_requirements,
+        report_style=report_style,
+        source_policy=source_policy,
     )
     report = str(report)
     file_paths = await generate_report_files(report, sanitized_filename, word_fonts=word_fonts)
@@ -313,6 +410,8 @@ async def handle_start_plan_command(
     report_type = str(payload.get("report_type") or "").strip()
     user_requirements = str(payload.get("user_requirements") or "").strip() or None
     language = payload.get("language")
+    report_style = _normalize_report_style(payload.get("report_style"))
+    source_policy = _normalize_source_policy(payload.get("source_policy"))
 
     if not task:
         await _safe_websocket_send_json(
@@ -339,22 +438,34 @@ async def handle_start_plan_command(
         query=task,
         user_requirements=user_requirements,
         language=language,
+        report_style=report_style,
+        source_policy=source_policy,
     )
 
     if not outline.outline_id:
         outline.outline_id = uuid.uuid4().hex
 
+    payload["report_style"] = report_style
+    payload["source_policy"] = source_policy
     outline_session[outline.outline_id] = {
         "outline": outline.to_dict(),
         "report_blueprint": blueprint.to_dict(),
         "start_payload": payload,
         "user_requirements": user_requirements,
         "language": language,
+        "report_style": report_style,
+        "source_policy": source_policy,
     }
 
     await _safe_websocket_send_json(
         websocket,
-        _serialize_outline_payload(outline, blueprint, message_type="outline_draft"),
+        _serialize_outline_payload(
+            outline,
+            blueprint,
+            message_type="outline_draft",
+            report_style=report_style,
+            source_policy=source_policy,
+        ),
         context="start-plan/outline-draft",
     )
 
@@ -380,6 +491,8 @@ async def handle_revise_plan_command(
     current_outline = normalize_outline_payload(state.get("outline") or {}, query_hint=(state.get("start_payload") or {}).get("task"))
     current_blueprint = normalize_blueprint_payload(state.get("report_blueprint") or {}, outline=current_outline)
     language = payload.get("language") or state.get("language")
+    report_style = _normalize_report_style(payload.get("report_style") or state.get("report_style"))
+    source_policy = _normalize_source_policy(payload.get("source_policy") or state.get("source_policy"))
 
     if mode == "manual_replace":
         manual_outline = payload.get("manual_outline")
@@ -409,6 +522,8 @@ async def handle_revise_plan_command(
             outline=current_outline,
             instruction=instruction,
             language=language,
+            report_style=report_style,
+            source_policy=source_policy,
         )
         revised_outline.outline_id = outline_id
         if isinstance(payload.get("report_blueprint"), dict):
@@ -428,10 +543,18 @@ async def handle_revise_plan_command(
     state["outline"] = revised_outline.to_dict()
     state["report_blueprint"] = revised_blueprint.to_dict()
     state["language"] = language
+    state["report_style"] = report_style
+    state["source_policy"] = source_policy
 
     await _safe_websocket_send_json(
         websocket,
-        _serialize_outline_payload(revised_outline, revised_blueprint, message_type="outline_updated"),
+        _serialize_outline_payload(
+            revised_outline,
+            revised_blueprint,
+            message_type="outline_updated",
+            report_style=report_style,
+            source_policy=source_policy,
+        ),
         context="revise-plan/outline-updated",
     )
 
@@ -468,7 +591,15 @@ async def handle_execute_plan_command(
         "mcp_strategy",
         "mcp_configs",
         "word_fonts",
+        "report_style",
+        "source_policy",
     }})
+    start_payload["report_style"] = _normalize_report_style(
+        start_payload.get("report_style") or state.get("report_style")
+    )
+    start_payload["source_policy"] = _normalize_source_policy(
+        start_payload.get("source_policy") or state.get("source_policy")
+    )
 
     approved_outline_payload = payload.get("approved_outline")
     if isinstance(approved_outline_payload, dict):
@@ -490,10 +621,18 @@ async def handle_execute_plan_command(
         final_blueprint = normalize_blueprint_payload(state.get("report_blueprint") or {}, outline=final_outline)
 
     valid, errors = validate_outline(final_outline)
-    if not valid:
+    execution_errors = _validate_outline_for_execution(final_outline, str(start_payload.get("task") or final_outline.query))
+    if (not valid) or execution_errors:
+        merged_errors = list(errors)
+        merged_errors.extend(execution_errors)
         await _safe_websocket_send_json(
             websocket,
-            {"type": "error", "content": "error", "output": f"Outline validation failed: {', '.join(errors)}"},
+            {
+                "type": "outline_validation_error",
+                "content": "outline_validation_error",
+                "output": f"Outline validation failed: {', '.join(merged_errors)}",
+                "errors": merged_errors,
+            },
             context="execute-plan/validation-failed",
         )
         return
@@ -502,6 +641,8 @@ async def handle_execute_plan_command(
     state["report_blueprint"] = final_blueprint.to_dict()
     state["start_payload"] = start_payload
     state["user_requirements"] = payload.get("user_requirements") or state.get("user_requirements")
+    state["report_style"] = start_payload.get("report_style")
+    state["source_policy"] = start_payload.get("source_policy")
 
     await handle_start_command(
         websocket,
@@ -787,4 +928,6 @@ def extract_command_data(json_data: Dict) -> tuple:
         json_data.get("mcp_strategy", "fast"),
         json_data.get("mcp_configs", []),
         json_data.get("word_fonts", []),
+        _normalize_report_style(json_data.get("report_style")),
+        _normalize_source_policy(json_data.get("source_policy")),
     )

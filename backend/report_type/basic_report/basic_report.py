@@ -26,6 +26,8 @@ class BasicReport:
         report_blueprint=None,
         outline_locked: bool = False,
         user_requirements: str | None = None,
+        report_style: str = "strategic_report",
+        source_policy: str = "medium_tier",
     ):
         self.query = query
         self.query_domains = query_domains
@@ -69,6 +71,8 @@ class BasicReport:
         gpt_researcher_params["outline_locked"] = outline_locked
         if user_requirements is not None:
             gpt_researcher_params["user_requirements"] = user_requirements
+        gpt_researcher_params["report_style"] = report_style
+        gpt_researcher_params["source_policy"] = source_policy
 
         self.gpt_researcher = GPTResearcher(**gpt_researcher_params)
 

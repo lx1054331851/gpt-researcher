@@ -483,6 +483,120 @@ Assume the current date is {datetime.now(timezone.utc).strftime('%B %d, %Y')}.
 """
 
     @staticmethod
+    def generate_adaptive_deep_research_prompt(
+        question: str,
+        context: str,
+        report_source: str,
+        report_format="apa",
+        tone=None,
+        total_words=2000,
+        language: str = "english",
+        report_style: str = "strategic_report",
+        must_answer_questions: list[str] | None = None,
+        source_policy: str = "medium_tier",
+    ):
+        """Prompt specialized for adaptive deep research (plan -> evidence -> judgement)."""
+        reference_prompt = ""
+        if report_source == ReportSource.Web.value:
+            reference_prompt = """
+You MUST write all used source urls at the end of the report as references, and avoid duplicates.
+Every url should be hyperlinked: [url website](url)
+Additionally, include hyperlinks to relevant URLs at the sentence/paragraph where they are used.
+"""
+        else:
+            reference_prompt = """
+You MUST write all used source document names at the end of the report as references, without duplicates.
+"""
+
+        tone_prompt = f"Write the report in a {tone.value} tone." if tone else ""
+        style = (report_style or "strategic_report").strip().lower()
+        if style == "consulting_brief":
+            style_prompt = """
+Style requirement: consulting brief.
+- Use concise, scan-friendly sections with sharp takeaways.
+- Prefer compact bullets and markdown tables for tradeoffs and comparisons.
+- Keep paragraphs short and executive-facing.
+"""
+        else:
+            style_prompt = """
+Style requirement: strategic report.
+- Build a coherent narrative from context, evidence, to judgement.
+- Use richer explanatory transitions and clear section logic.
+- Preserve readability while keeping evidence explicit.
+"""
+
+        source_policy_prompt = f"""
+Source policy: {source_policy}.
+- Critical conclusions should be supported by higher-trust sources whenever available.
+- If evidence is weak or mostly lower-tier, explicitly mark uncertainty.
+"""
+
+        must_answer = must_answer_questions or []
+        must_answer_block = ""
+        if must_answer:
+            formatted = "\n".join([f"- {item}" for item in must_answer if str(item).strip()])
+            if formatted:
+                must_answer_block = f"""
+You MUST explicitly answer all of these decision questions in the report:
+{formatted}
+"""
+
+        return f"""
+Using the adaptive deep-research evidence package below:
+
+"{context}"
+
+Write a comprehensive report answering: "{question}"
+
+The report MUST reflect the adaptive workflow:
+1. Foundation: frame scope, assumptions, and constraints.
+2. Evidence: synthesize verified findings, conflicts, and open verification items.
+3. Judgement: deliver explicit recommendations, tradeoffs, and next actions.
+
+Coverage lenses to address across the report:
+1. Problem framing and constraints
+2. Current state and baseline evidence
+3. Option space and comparative paths
+4. Stakeholders and demand signals
+5. Economics and operational feasibility
+6. Risk, compliance, and uncertainty
+7. Competition, substitutes, and benchmarks
+8. Roadmap, priorities, and actions
+
+Required output behavior:
+- Minimum length: {total_words} words.
+- Use markdown with clear headers.
+- Include comparison tables where tradeoffs matter.
+- Include one compact "Decision Sheet" table with columns:
+  `Option | Expected Value | Feasibility | Main Risk | First Experiment | Go/No-Go Signal`.
+- Maintain explicit uncertainty labeling when evidence is incomplete.
+- Do not drift into generic methodology-only writing; stay tied to the task objective.
+- Do not over-concentrate on only one lens (e.g., purely technical analysis).
+- Keep an explicit narrative chain:
+  macro context -> focal target baseline -> demand/stakeholders -> supply/input constraints
+  -> options/tradeoffs -> execution roadmap and decision actions.
+- Include an embedded subsection such as "Coverage Check" and/or "Gap Notes":
+  - state which coverage lenses are addressed,
+  - identify missing lenses (if any),
+  - give reasons and concrete follow-up evidence actions for those gaps.
+- Use in-text citations in {report_format} with markdown links, e.g. ([in-text citation](url)).
+- Reference hygiene rules:
+  - every reference line must include one valid markdown URL,
+  - remove placeholders like "链接/来源/source/reference/待补充",
+  - deduplicate repeated sources.
+- Prioritize relevance and objective goal completion over verbosity.
+- {tone_prompt}
+- Write in {language}.
+
+{style_prompt}
+{source_policy_prompt}
+{must_answer_block}
+{reference_prompt}
+
+Assume the current date is {datetime.now(timezone.utc).strftime('%B %d, %Y')}.
+"""
+
+    @staticmethod
     def auto_agent_instructions():
         return """
 This task involves researching a given topic, regardless of its complexity or the availability of a definitive answer. The research is conducted by a specific server, defined by its type and role, with each server requiring distinct instructions.
@@ -852,7 +966,7 @@ report_type_mapping = {
     ReportType.CustomReport.value: "generate_custom_report_prompt",
     ReportType.SubtopicReport.value: "generate_subtopic_report_prompt",
     ReportType.DeepResearch.value: "generate_deep_research_prompt",
-    ReportType.AdaptiveDeepResearch.value: "generate_deep_research_prompt",
+    ReportType.AdaptiveDeepResearch.value: "generate_adaptive_deep_research_prompt",
 }
 
 

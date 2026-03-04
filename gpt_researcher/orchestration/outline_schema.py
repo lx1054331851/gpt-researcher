@@ -29,6 +29,90 @@ def _coerce_stage(value: str | None) -> OutlineStage:
     return "evidence"
 
 
+def _coerce_str_list(value: Any) -> list[str]:
+    items: list[str] = []
+    if isinstance(value, list):
+        for item in value:
+            text = str(item).strip()
+            if text:
+                items.append(text)
+    return items
+
+
+def _default_workstreams(query: str) -> list[dict[str, Any]]:
+    topic = query.strip() or "research topic"
+    return [
+        {
+            "id": "ws-1-brand-strategy-sustainability",
+            "title": "品牌战略与可持续承诺调研",
+            "intent": f"梳理 {topic} 的品牌战略定位、可持续承诺与公开披露一致性。",
+            "deliverable": "战略承诺一致性结论与关键差距清单",
+        },
+        {
+            "id": "ws-2-fabric-trend-2027",
+            "title": "2027 面料趋势调研",
+            "intent": f"识别与 {topic} 相关的 2027 年面料趋势、应用场景与商业成熟度。",
+            "deliverable": "趋势优先级矩阵（价值/可行性）",
+        },
+        {
+            "id": "ws-3-functional-tech-upgrade",
+            "title": "功能性技术升级调研",
+            "intent": f"评估 {topic} 的功能技术升级路径、验证指标与落地门槛。",
+            "deliverable": "技术升级路线图与验证指标",
+        },
+        {
+            "id": "ws-4-green-material-low-carbon",
+            "title": "环保材料与低碳工艺调研",
+            "intent": f"评估 {topic} 可采用的环保材料与低碳工艺及其成本影响。",
+            "deliverable": "材料与工艺备选清单（含减碳与成本权衡）",
+        },
+        {
+            "id": "ws-5-competition-consumer-feedback",
+            "title": "竞品与消费者反馈调研",
+            "intent": f"对比 {topic} 竞品策略并整合消费者反馈与偏好信号。",
+            "deliverable": "竞品对比与用户反馈洞察卡片",
+        },
+        {
+            "id": "ws-6-synthesis-recommendation-output",
+            "title": "综合评估与方案输出",
+            "intent": f"将前述证据合并为 {topic} 的可执行建议与阶段性行动方案。",
+            "deliverable": "最终建议包（优先级、资源、风险与里程碑）",
+        },
+    ]
+
+
+def _coerce_workstreams(value: Any, query: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    if isinstance(value, list):
+        for idx, item in enumerate(value, start=1):
+            if isinstance(item, dict):
+                title = str(item.get("title") or item.get("name") or "").strip()
+                if not title:
+                    continue
+                items.append(
+                    {
+                        "id": str(item.get("id") or _slugify(title) or f"ws-{idx}"),
+                        "title": title,
+                        "intent": str(item.get("intent") or item.get("objective") or title).strip(),
+                        "deliverable": str(item.get("deliverable") or "").strip(),
+                    }
+                )
+            else:
+                text = str(item).strip()
+                if text:
+                    items.append(
+                        {
+                            "id": _slugify(text) or f"ws-{idx}",
+                            "title": text,
+                            "intent": text,
+                            "deliverable": "",
+                        }
+                    )
+    if not items:
+        return _default_workstreams(query)
+    return items
+
+
 @dataclass
 class OutlineSection:
     id: str
@@ -80,6 +164,12 @@ class ResearchOutline:
     outline_id: str
     query: str
     objective: str
+    scope: str = ""
+    workstreams: list[dict[str, Any]] = field(default_factory=list)
+    evidence_requirements: list[str] = field(default_factory=list)
+    deliverables: list[str] = field(default_factory=list)
+    risk_controls: list[str] = field(default_factory=list)
+    must_answer_questions: list[str] = field(default_factory=list)
     audience: str | None = None
     constraints: list[str] = field(default_factory=list)
     sections: list[OutlineSection] = field(default_factory=list)
@@ -89,6 +179,34 @@ class ResearchOutline:
         outline_id = str(data.get("outline_id") or "").strip() or uuid.uuid4().hex
         query = str(data.get("query") or query_hint or "").strip()
         objective = str(data.get("objective") or query or "").strip() or "Deliver decision-ready research findings."
+        scope = str(data.get("scope") or "").strip()
+        if not scope:
+            base = query or "the target topic"
+            scope = f"Focus on decision-relevant facts, market/technology evidence, and executable recommendations for {base}."
+        workstreams = _coerce_workstreams(data.get("workstreams"), query)
+        evidence_requirements = _coerce_str_list(data.get("evidence_requirements"))
+        if not evidence_requirements:
+            evidence_requirements = [
+                "Each key conclusion needs at least one high-trust anchor (T1/T2).",
+                "Cross-source verification is required for disputed claims.",
+            ]
+        deliverables = _coerce_str_list(data.get("deliverables"))
+        if not deliverables:
+            deliverables = [
+                "Decision-ready recommendation set with priorities and tradeoffs.",
+                "Implementation roadmap with milestones and risks.",
+            ]
+        risk_controls = _coerce_str_list(data.get("risk_controls"))
+        if not risk_controls:
+            risk_controls = [
+                "Flag evidence conflicts and unresolved assumptions explicitly.",
+                "Prevent low-quality sources from solely supporting key conclusions.",
+            ]
+        must_answer_questions = _coerce_str_list(data.get("must_answer_questions"))
+        if not must_answer_questions and query:
+            must_answer_questions = [
+                f"What should the user do next regarding {query}?",
+            ]
         audience = str(data.get("audience") or "").strip() or None
         constraints = [str(item).strip() for item in (data.get("constraints") or []) if str(item).strip()]
         raw_sections = data.get("sections") or []
@@ -130,6 +248,12 @@ class ResearchOutline:
             outline_id=outline_id,
             query=query,
             objective=objective,
+            scope=scope,
+            workstreams=workstreams,
+            evidence_requirements=evidence_requirements,
+            deliverables=deliverables,
+            risk_controls=risk_controls,
+            must_answer_questions=must_answer_questions,
             audience=audience,
             constraints=constraints,
             sections=sections,
@@ -140,6 +264,12 @@ class ResearchOutline:
             "outline_id": self.outline_id,
             "query": self.query,
             "objective": self.objective,
+            "scope": self.scope,
+            "workstreams": self.workstreams,
+            "evidence_requirements": self.evidence_requirements,
+            "deliverables": self.deliverables,
+            "risk_controls": self.risk_controls,
+            "must_answer_questions": self.must_answer_questions,
             "audience": self.audience,
             "constraints": self.constraints,
             "sections": [section.to_dict() for section in self.sections],
@@ -317,4 +447,3 @@ def build_blueprint_from_outline(
         },
         output_constraints=output_constraints or default_constraints,
     )
-
