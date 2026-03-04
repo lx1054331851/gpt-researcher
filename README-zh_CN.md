@@ -145,6 +145,12 @@ $ export TAVILY_API_KEY={Your Tavily API Key here}
 ```bash
 $ uvicorn main:app --reload
 ```
+
+Windows PowerShell（强制使用项目 `.venv`）:
+
+```powershell
+.\scripts\start-backend.ps1
+```
 <br />
 
 > **第 5 步（可选）** - 启动 NextJS 前端（3000 端口）
@@ -153,6 +159,12 @@ $ uvicorn main:app --reload
 $ cd frontend/nextjs
 $ npm install --legacy-peer-deps
 $ npm run dev
+```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\start-frontend.ps1
 ```
 
 <br />

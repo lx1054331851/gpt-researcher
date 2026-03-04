@@ -3,6 +3,7 @@ import urllib
 import mistune
 import os
 import re
+import sys
 from typing import Iterable, List, Optional
 
 DEFAULT_WORD_FONT_CHAIN = ["仿宋", "FangSong", "STFangsong"]
@@ -124,6 +125,21 @@ def _preprocess_images_for_pdf(text: str) -> str:
     return re.sub(pattern, replace_image_url, text)
 
 
+def _has_required_weasyprint_runtime() -> bool:
+    """Best-effort runtime check for platforms that need native GTK libs."""
+    if sys.platform != "win32":
+        return True
+
+    try:
+        import ctypes.util
+        return bool(
+            ctypes.util.find_library("libgobject-2.0-0")
+            or ctypes.util.find_library("libgobject-2.0")
+        )
+    except Exception:
+        return False
+
+
 async def write_md_to_pdf(text: str, filename: str = "") -> str:
     """Converts Markdown text to a PDF file and returns the file path.
 
@@ -136,6 +152,13 @@ async def write_md_to_pdf(text: str, filename: str = "") -> str:
     file_path = f"outputs/{filename[:60]}.pdf"
 
     try:
+        if not _has_required_weasyprint_runtime():
+            print(
+                "Skipping PDF export on Windows: missing GTK runtime "
+                "(libgobject-2.0-0). Install GTK3 runtime and retry."
+            )
+            return ""
+
         # Resolve css path relative to this backend module to avoid
         # dependency on the current working directory.
         current_dir = os.path.dirname(os.path.abspath(__file__))

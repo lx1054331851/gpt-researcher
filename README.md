@@ -130,12 +130,24 @@ See the [Documentation](https://docs.gptr.dev/docs/gpt-researcher/getting-starte
     python -m uvicorn main:app --reload
     ```
 
+    Windows (PowerShell, forces local `.venv` interpreter):
+
+    ```powershell
+    .\scripts\start-backend.ps1
+    ```
+
   5. (Optional, NextJS frontend) Start the frontend on port 3000:
 
     ```bash
     cd frontend/nextjs
     npm install --legacy-peer-deps
     npm run dev
+    ```
+
+    Windows (PowerShell):
+
+    ```powershell
+    .\scripts\start-frontend.ps1
     ```
 
   Backend API runs at [http://localhost:8000](http://localhost:8000).

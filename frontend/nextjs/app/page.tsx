@@ -104,8 +104,7 @@ export default function Home() {
     getChatMessages
   } = useResearchHistoryContext();
 
-  // Only initialize the WebSocket hook reference, don't connect automatically
-  const websocketRef = useRef(useWebSocket(
+  const { socket, initializeWebSocket, revisePlan, executePlan } = useWebSocket(
     setOrderedData,
     setAnswer,
     setLoading,
@@ -121,10 +120,19 @@ export default function Home() {
         setAdaptiveStage('await_outline_approval');
       },
     }
-  ));
-  
-  // Use the reference to access websocket functions
-  const { socket, initializeWebSocket, revisePlan, executePlan } = websocketRef.current;
+  );
+
+  const resolveLatestOutlineData = (): OutlineDraftData | OutlineUpdatedData | null => {
+    if (latestOutlineData) return latestOutlineData;
+
+    for (let i = orderedData.length - 1; i >= 0; i -= 1) {
+      const item = orderedData[i];
+      if (item.type === 'outline_draft' || item.type === 'outline_updated') {
+        return item;
+      }
+    }
+    return null;
+  };
 
   const handleFeedbackSubmit = (feedback: string | null) => {
     if (socket) {
@@ -134,33 +142,57 @@ export default function Home() {
   };
 
   const handleApproveOutlineExecute = () => {
-    if (!latestOutlineData) return;
+    const outlineData = resolveLatestOutlineData();
+    if (!outlineData) {
+      toast.error("未找到可执行的大纲，请重新生成。");
+      return;
+    }
     setAdaptiveStage('executing');
-    executePlan({
-      outline_id: latestOutlineData.outline_id,
-      approved_outline: latestOutlineData.outline,
-      report_blueprint: latestOutlineData.report_blueprint,
+    const sent = executePlan({
+      outline_id: outlineData.outline_id,
+      approved_outline: outlineData.outline,
+      report_blueprint: outlineData.report_blueprint,
     });
+    if (!sent) {
+      setAdaptiveStage('await_outline_approval');
+      toast.error("连接已断开，无法执行，请重新开始任务。");
+    }
   };
 
   const handleManualOutlineExecute = (manualOutline: any, manualBlueprint: any) => {
-    if (!latestOutlineData) return;
+    const outlineData = resolveLatestOutlineData();
+    if (!outlineData) {
+      toast.error("未找到可执行的大纲，请重新生成。");
+      return;
+    }
     setAdaptiveStage('executing');
-    executePlan({
-      outline_id: latestOutlineData.outline_id,
+    const sent = executePlan({
+      outline_id: outlineData.outline_id,
       approved_outline: manualOutline,
       report_blueprint: manualBlueprint,
     });
+    if (!sent) {
+      setAdaptiveStage('await_outline_approval');
+      toast.error("连接已断开，无法执行，请重新开始任务。");
+    }
   };
 
   const handleAiRewriteOutline = (instruction: string) => {
-    if (!latestOutlineData) return;
+    const outlineData = resolveLatestOutlineData();
+    if (!outlineData) {
+      toast.error("未找到可改写的大纲，请重新生成。");
+      return;
+    }
     setAdaptiveStage('planning');
-    revisePlan({
-      outline_id: latestOutlineData.outline_id,
+    const sent = revisePlan({
+      outline_id: outlineData.outline_id,
       mode: 'ai_rewrite',
       instruction,
     });
+    if (!sent) {
+      setAdaptiveStage('await_outline_approval');
+      toast.error("连接已断开，无法改写，请重新开始任务。");
+    }
   };
 
   const handleChat = async (message: string) => {
